@@ -437,7 +437,7 @@ def require_authorized(host: str, allowlist_path: str = None) -> None:
 # ---------- orchestrator ----------
 
 AUDIT_STEPS = ["robots", "homepage", "tls", "headers", "http_redirect",
-               "email_auth", "privacy", "accessibility", "browser_a11y"]
+               "email_auth", "privacy", "accessibility", "browser_a11y", "pages"]
 
 
 def check_browser_accessibility(host: str) -> dict:
@@ -447,8 +447,12 @@ def check_browser_accessibility(host: str) -> dict:
 
 
 def run_audit(domain: str, allowlist_path: str = None, on_step=None,
-              browser: bool = True) -> dict:
-    """Run every passive check. on_step(name, "running" | "done" | "skipped") reports progress."""
+              browser: bool = True, pages: int = 5) -> dict:
+    """Run every passive check. on_step(name, "running" | "done" | "skipped") reports progress.
+
+    pages: how many extra same-site pages to check beyond the homepage (0 = homepage only).
+    """
+    import crawler
     host = _norm(domain)
     require_authorized(host, allowlist_path)
     log.info("Auditing %s (passive)", host)
@@ -479,6 +483,14 @@ def run_audit(domain: str, allowlist_path: str = None, on_step=None,
         result["accessibility_browser"] = step("browser_a11y", check_browser_accessibility, host)
     elif on_step:
         on_step("browser_a11y", "skipped")
+
+    home_status, _, home_html = home
+    if "_unavailable" not in result["privacy"]:
+        result["privacy"]["policy_links_found"] = crawler.policy_links(home_html, host)
+    if pages > 0 and home_status is not None:
+        result.update(step("pages", crawler.scan_pages, host, home_html, pages, browser))
+    elif on_step:
+        on_step("pages", "skipped")
     return result
 
 
@@ -487,6 +499,8 @@ def main():
     ap.add_argument("domain", help="e.g. example.edu")
     ap.add_argument("--json", metavar="FILE", help="write raw findings to a JSON file")
     ap.add_argument("-v", "--verbose", action="store_true", help="log every request")
+    ap.add_argument("--pages", type=int, default=5, metavar="N",
+                    help="extra same-site pages to check beyond the homepage (default 5, 0 = none)")
     ap.add_argument("--no-browser", action="store_true",
                     help="skip the real-browser accessibility audit (faster)")
     ap.add_argument("--allowlist", metavar="FILE",
@@ -496,7 +510,7 @@ def main():
                         format="%(levelname)s %(message)s", stream=sys.stderr)
 
     try:
-        data = run_audit(args.domain, args.allowlist, browser=not args.no_browser)
+        data = run_audit(args.domain, args.allowlist, browser=not args.no_browser, pages=args.pages)
     except TargetNotAuthorized as e:
         log.error("%s", e)
         sys.exit(2)

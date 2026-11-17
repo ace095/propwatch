@@ -112,6 +112,14 @@ class OwaspOrg(unittest.TestCase):
         self.assertGreater(b["keyboard"]["reached_by_tab"], 0)
         self.assertIsNone(b["keyboard"]["possible_keyboard_trap"])
 
+    def test_other_pages_are_checked_within_limits(self):
+        r = self.r
+        self.assertGreater(r["crawl"]["scanned"], 0)
+        self.assertLessEqual(r["crawl"]["scanned"], r["crawl"]["limit"])
+        for page in r["pages"]:
+            self.assertTrue(page["url"].startswith("https://owasp.org/"), page["url"])
+            self.assertNotIn("/api/", page["url"])  # disallowed by owasp.org/robots.txt
+
     def test_homepage_is_parsed(self):
         self.assertTrue(self.r["accessibility"]["has_lang_attribute"])
         self.assertGreater(self.r["accessibility"]["images_total"], 0)

@@ -17,6 +17,11 @@ passive scan, hand over the findings, close the paid engagement.
   Chrome already installed; add `--no-browser` to skip it. If no browser is found the
   report says it was not run, never that the page passed.
 
+- Other pages: finds up to 5 important same-site pages (privacy, terms, contact, login...)
+  from homepage links and the sitemap, skips anything `robots.txt` disallows, and checks
+  each for accessibility issues, insecure `http://` resources and login forms (axe on the
+  first 3). Use `--pages N` (0 = homepage only).
+
 ## What it deliberately does NOT do
 No login testing, no vuln probing, no port scans, no payloads. Passive only.
 Running active tests on a site you don't own/weren't authorized to test can be

@@ -105,7 +105,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const STEP_LABELS = { robots: "robots.txt", homepage: "Homepage", tls: "Encryption (TLS)", headers: "Security headers",
-  http_redirect: "HTTP to HTTPS", email_auth: "Email spoofing", privacy: "Privacy", accessibility: "Accessibility (HTML)", browser_a11y: "Browser audit (axe)" };
+  http_redirect: "HTTP to HTTPS", email_auth: "Email spoofing", privacy: "Privacy", accessibility: "Accessibility (HTML)", browser_a11y: "Browser audit (axe)", pages: "Other pages" };
 let jobId = null, timer = null;
 
 function el(tag, cls, text) {
@@ -223,6 +223,27 @@ function assess(r) {
       const bad = (imp.critical || 0) + (imp.serious || 0) > 0 || k.possible_keyboard_trap;
       out.push(["Accessibility (real browser, axe-core)", bad ? "bad" : (b.violation_rules || (k.no_visible_focus_style || []).length) ? "warn" : "good", lines]);
     }
+  }
+  if (r.pages) {
+    const c = r.crawl || {};
+    const lines = ["Checked " + c.scanned + " of " + c.discovered + " discoverable pages" +
+      (c.blocked_by_robots ? " (" + c.blocked_by_robots + " skipped because robots.txt asks crawlers to stay out)" : "")];
+    let worst = "good";
+    const raise = (s) => { if (["good", "warn", "bad"].indexOf(s) > ["good", "warn", "bad"].indexOf(worst)) worst = s; };
+    r.pages.forEach((p) => {
+      if (p.status === null) { lines.push(p.url + ": could not be fetched"); raise("warn"); return; }
+      const bits = [p.status + " " + p.url.replace("https://", "")];
+      if (p.a11y_issue_count) { bits.push(p.a11y_issue_count + " HTML accessibility issues"); raise("warn"); }
+      if (p.mixed_content_count) { bits.push(p.mixed_content_count + " insecure (http://) resources"); raise("bad"); }
+      if (p.password_fields) bits.push("has a login form");
+      if (p.axe && p.axe.violation_rules) {
+        bits.push("axe: " + p.axe.violations.map((v) => v.id + " x" + v.count).join(", "));
+        raise(((p.axe.by_impact.critical || 0) + (p.axe.by_impact.serious || 0)) ? "bad" : "warn");
+      }
+      if (p.axe && p.axe.keyboard_trap) { bits.push("possible keyboard trap"); raise("bad"); }
+      lines.push(bits.join(" | "));
+    });
+    out.push(["Other pages checked", r.pages.length ? worst : "unk", lines]);
   }
   const ro = r.robots || {};
   out.push(["robots.txt", "unk", [ro.found ? (ro.disallow_rules || []).length + " disallow rules listed" : "No robots.txt found"]]);
