@@ -1,0 +1,48 @@
+{
+  "target": "example.com",
+  "scanned_at": "2026-11-17T05:35:22.672976+00:00",
+  "scan_type": "passive",
+  "robots": {
+    "found": false,
+    "disallow_rules": []
+  },
+  "tls": {
+    "reachable": false,
+    "error": "[Errno -2] Name or service not known"
+  },
+  "headers": {
+    "http_status": 200,
+    "redirects_to_https": null,
+    "present": {},
+    "missing": {
+      "strict-transport-security": "HSTS \u2014 forces HTTPS",
+      "content-security-policy": "CSP \u2014 mitigates XSS/injection",
+      "x-frame-options": "Clickjacking protection",
+      "x-content-type-options": "MIME-sniffing protection",
+      "referrer-policy": "Controls referrer leakage",
+      "permissions-policy": "Restricts browser features"
+    },
+    "server": "cloudflare",
+    "powered_by": null
+  },
+  "http_redirect": {
+    "_unavailable": "Could not fetch http://example.com/ (<urlopen error [Errno -2] Name or service not known>)."
+  },
+  "email_auth": {
+    "_unavailable": "DNS lookup failed or no resolver available (install dnspython or dig); SPF/DMARC status unknown."
+  },
+  "privacy": {
+    "policy_pages_found": [],
+    "mentions_cookies": false,
+    "has_analytics": false,
+    "cookie_banner_hint": false
+  },
+  "accessibility": {
+    "engine": "beautifulsoup",
+    "has_lang_attribute": true,
+    "page_has_title": true,
+    "images_total": 0,
+    "images_missing_alt": 0,
+    "note": "Run axe-core/Pa11y for a full WCAG 2.1 AA audit."
+  }
+}
