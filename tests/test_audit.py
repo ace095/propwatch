@@ -129,6 +129,7 @@ class HomepageFetchedOnce(unittest.TestCase):
              mock.patch.object(audit, "load_allowlist", return_value=["x.test"]), \
              mock.patch.object(audit, "check_tls", return_value={}), \
              mock.patch.object(audit, "check_browser_accessibility", return_value={}), \
+             mock.patch.object(audit, "check_cookies", return_value={}), \
              mock.patch.object(audit, "check_email_auth", return_value={}):
             audit.run_audit("x.test")
         self.assertEqual(calls.count("https://x.test/"), 1)
@@ -419,16 +420,20 @@ class BrowserAudit(unittest.TestCase):
             result = audit.run_audit("x.test", browser=False, on_step=lambda n, s: steps.append((n, s)))
         browser.assert_not_called()
         self.assertNotIn("accessibility_browser", result)
+        self.assertNotIn("cookies", result)
         self.assertIn(("browser_a11y", "skipped"), steps)
+        self.assertIn(("cookies", "skipped"), steps)
 
     def test_browser_result_is_included_by_default(self):
         with mock.patch.object(audit, "load_allowlist", return_value=["x.test"]), \
              mock.patch.object(audit, "_get", return_value=(404, {}, "")), \
              mock.patch.object(audit, "check_tls", return_value={}), \
              mock.patch.object(audit, "check_email_auth", return_value={}), \
+             mock.patch.object(audit, "check_cookies", return_value={"issues": []}), \
              mock.patch.object(audit, "check_browser_accessibility", return_value={"violations": []}):
             result = audit.run_audit("x.test")
         self.assertEqual(result["accessibility_browser"], {"violations": []})
+        self.assertEqual(result["cookies"], {"issues": []})
 
 
 class TlsRetry(unittest.TestCase):

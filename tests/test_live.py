@@ -83,6 +83,13 @@ class ExampleCom(unittest.TestCase):
         self.assertGreater(b["rules_passed"], 0)
         self.assertEqual(b["keyboard"]["reached_by_tab"], b["keyboard"]["focusable_elements"])
 
+    def test_no_cookies_or_trackers_on_first_visit(self):
+        c = self.r["cookies"]
+        if "_unavailable" in c:
+            self.skipTest(c["_unavailable"])
+        self.assertEqual((c["cookies_total"], c["trackers"], c["issues"]), (0, [], []))
+        self.assertFalse(c["tracking_before_consent"])
+
     def test_mail_policy(self):
         self.assertEqual(self.r["email_auth"]["spf"], "v=spf1 -all")
         self.assertIn("p=reject", self.r["email_auth"]["dmarc"])
@@ -111,6 +118,15 @@ class OwaspOrg(unittest.TestCase):
         self.assertGreater(b["rules_passed"], 5)
         self.assertGreater(b["keyboard"]["reached_by_tab"], 0)
         self.assertIsNone(b["keyboard"]["possible_keyboard_trap"])
+
+    def test_cookie_audit_runs_and_finds_no_trackers(self):
+        c = self.r["cookies"]
+        if "_unavailable" in c:
+            self.skipTest(c["_unavailable"])
+        self.assertEqual(c["trackers"], [])  # owasp.org loads no known analytics or ad trackers
+        self.assertIn("note", c)
+        for cookie in c["cookies"]:
+            self.assertIn(cookie["party"], ("first", "third"))
 
     def test_other_pages_are_checked_within_limits(self):
         r = self.r

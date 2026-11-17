@@ -87,6 +87,8 @@ def issue_keys(r: dict) -> list:
         keys.add(f"a11y:{issue['rule']}")
     for v in (r.get("accessibility_browser") or {}).get("violations", []):
         keys.add(f"axe:{v['id']}")
+    for issue in (r.get("cookies") or {}).get("issues", []):
+        keys.add(f"cookies:{issue['rule']}")
     for page in r.get("pages") or []:
         path = page["url"].split("//", 1)[-1].split("/", 1)[-1] or "/"
         if page.get("mixed_content_count"):

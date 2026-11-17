@@ -36,13 +36,21 @@ AGENTS = {
         ),
     },
     "privacy": {
-        "keys": ["privacy", "headers", "email_auth"],
+        "keys": ["privacy", "cookies", "headers", "email_auth"],
         "rules": (
-            "You assess privacy & data-handling from PASSIVE findings.\n"
-            "Weigh: analytics loaded with no cookie banner or policy (Medium, "
-            "CCPA/GDPR); no privacy/accessibility policy page (Medium); permissive "
-            "referrer-policy leaking URLs (Low-Medium).\n"
-            "Standards (schools): FERPA, COPPA (under-13). Broadly: CCPA/GDPR."
+            "You assess privacy & data-handling from PASSIVE findings, including a "
+            "'cookies' audit of what a first-time visitor receives before clicking "
+            "anything (cookies, third-party requests, trackers, consent banner).\n"
+            "Use the severities already given in cookies.issues. Trackers before "
+            "consent with no banner are High; with a banner Medium. On a school or "
+            "children's site any advertising or social tracker is especially serious "
+            "(COPPA, FERPA, student privacy). No privacy/accessibility policy page "
+            "(Medium); permissive referrer-policy leaking URLs (Low-Medium).\n"
+            "Say clearly that behaviour AFTER the visitor accepts or rejects cookies "
+            "was not tested, and that the tracker list is a built-in list of well-known "
+            "services, so unknown trackers can be missed.\n"
+            "Standards (schools): FERPA, COPPA (under-13). Broadly: CCPA/CPRA, "
+            "GDPR / ePrivacy."
         ),
     },
     "accessibility": {

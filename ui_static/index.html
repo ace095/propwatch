@@ -127,7 +127,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const STEP_LABELS = { robots: "robots.txt", homepage: "Homepage", tls: "Encryption (TLS)", headers: "Security headers",
-  http_redirect: "HTTP to HTTPS", email_auth: "Email spoofing", privacy: "Privacy", accessibility: "Accessibility (HTML)", browser_a11y: "Browser audit (axe)", pages: "Other pages" };
+  http_redirect: "HTTP to HTTPS", email_auth: "Email spoofing", privacy: "Privacy", accessibility: "Accessibility (HTML)", browser_a11y: "Browser audit (axe)", cookies: "Cookies", pages: "Other pages" };
 let jobId = null, timer = null;
 
 function el(tag, cls, text) {
@@ -297,6 +297,18 @@ function assess(r) {
       if (b.needs_manual_review) lines.push(b.needs_manual_review + " checks need manual review");
       const bad = (imp.critical || 0) + (imp.serious || 0) > 0 || k.possible_keyboard_trap;
       out.push(["Accessibility (real browser, axe-core)", bad ? "bad" : (b.violation_rules || (k.no_visible_focus_style || []).length) ? "warn" : "good", lines]);
+    }
+  }
+  const ck = r.cookies;
+  if (ck) {
+    if (ck._unavailable) out.push(unknown("Cookies and trackers", ck));
+    else {
+      const lines = [ck.cookies_total + " cookie(s) set on a first visit (" + ck.first_party + " from the site, " + ck.third_party + " from outside companies)",
+        ck.trackers.length ? "Trackers found: " + ck.trackers.map((t) => t.domain + " (" + t.category + ")").join(", ") : "No known trackers found",
+        ck.consent_banner.found ? "Consent banner: yes" + (ck.consent_banner.vendor ? " (" + ck.consent_banner.vendor + ")" : "") : "Consent banner: none found"];
+      ck.issues.forEach((i) => lines.push(i.severity + ": " + i.rule + " - " + i.detail));
+      const sev = (s) => ck.issues.some((i) => i.severity === s);
+      out.push(["Cookies and trackers (before consent)", sev("High") ? "bad" : (sev("Medium") || sev("Low")) ? "warn" : "good", lines]);
     }
   }
   if (r.pages) {

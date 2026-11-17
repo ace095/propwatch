@@ -20,6 +20,7 @@ BAD = {
     "privacy": {"policy_pages_found": [], "policy_links_found": []},
     "accessibility": {"issues": [{"rule": "Empty headings", "wcag": "1.3.1", "count": 1}]},
     "accessibility_browser": {"violations": [{"id": "color-contrast"}]},
+    "cookies": {"issues": [{"rule": "Tracking starts with no cookie consent banner"}]},
     "pages": [{"url": "https://x.test/donate", "mixed_content_count": 2,
                "a11y_issues": [{"rule": "Form fields without a label"}],
                "axe": {"violations": [{"id": "label"}]}}],
@@ -41,6 +42,7 @@ class IssueKeys(unittest.TestCase):
             "tls:expiring_soon", "headers:missing:content-security-policy", "headers:missing:referrer-policy",
             "redirect:http_not_upgraded", "email:no_spf", "email:dmarc_not_enforced", "privacy:no_policy_page",
             "a11y:Empty headings", "axe:color-contrast", "page:/donate:mixed_content",
+            "cookies:Tracking starts with no cookie consent banner",
             "page:/donate:a11y:Form fields without a label", "page:/donate:axe:label"]))
 
     def test_clean_site_has_no_keys(self):
@@ -82,12 +84,12 @@ class Storage(WithDb):
     def test_first_scan_then_diff_against_previous(self):
         first = scheduler.record_run(self.conn, "x.test", BAD)
         self.assertTrue(first["first_scan"])
-        self.assertEqual(first["total"], 12)
+        self.assertEqual(first["total"], 13)
         second = scheduler.record_run(self.conn, "x.test", CLEAN)
         self.assertFalse(second["first_scan"])
-        self.assertEqual((len(second["new"]), len(second["resolved"])), (0, 12))
+        self.assertEqual((len(second["new"]), len(second["resolved"])), (0, 13))
         third = scheduler.record_run(self.conn, "x.test", BAD)
-        self.assertEqual((len(third["new"]), len(third["resolved"])), (12, 0))
+        self.assertEqual((len(third["new"]), len(third["resolved"])), (13, 0))
 
     def test_failed_run_is_recorded_and_not_used_as_baseline(self):
         scheduler.record_run(self.conn, "x.test", BAD)
@@ -101,8 +103,8 @@ class Storage(WithDb):
         scheduler.record_run(self.conn, "x.test", BAD)
         scheduler.record_run(self.conn, "x.test", CLEAN)
         newest, oldest = scheduler.history(self.conn, "x.test")
-        self.assertEqual((newest["total"], len(newest["resolved"])), (0, 12))
-        self.assertEqual((oldest["total"], len(oldest["new"])), (12, 12))
+        self.assertEqual((newest["total"], len(newest["resolved"])), (0, 13))
+        self.assertEqual((oldest["total"], len(oldest["new"])), (13, 13))
 
     def test_remove(self):
         scheduler.add_target(self.conn, "x.test")
@@ -163,12 +165,12 @@ class CommandLine(unittest.TestCase):
         with mock.patch.object(audit, "run_audit", return_value=BAD):
             code, out = self.run_cli("run-due")
         self.assertEqual(code, 0)
-        self.assertIn("12 issues (first scan)", out)
+        self.assertIn("13 issues (first scan)", out)
         with mock.patch.object(audit, "run_audit", return_value=CLEAN):
             code, out = self.run_cli("run", "x.test")
-        self.assertIn("0 new, 12 resolved", out)
+        self.assertIn("0 new, 13 resolved", out)
         self.assertIn("- tls:expiring_soon", out)
-        self.assertIn("0 new, 12 resolved", self.run_cli("diff", "x.test")[1])
+        self.assertIn("0 new, 13 resolved", self.run_cli("diff", "x.test")[1])
 
     def test_add_unauthorized_exits_2(self):
         self.assertEqual(self.run_cli("add", "stranger.test")[0], 2)

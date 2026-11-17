@@ -461,7 +461,13 @@ def require_authorized(host: str, allowlist_path: str = None) -> None:
 # ---------- orchestrator ----------
 
 AUDIT_STEPS = ["robots", "homepage", "tls", "headers", "http_redirect",
-               "email_auth", "privacy", "accessibility", "browser_a11y", "pages"]
+               "email_auth", "privacy", "accessibility", "browser_a11y", "cookies", "pages"]
+
+
+def check_cookies(host: str) -> dict:
+    """Cookies, trackers and consent banner seen by a first-time visitor (see cookie_audit.py)."""
+    import cookie_audit
+    return cookie_audit.run_cookie_audit(f"https://{host}/")
 
 
 def check_browser_accessibility(host: str) -> dict:
@@ -506,8 +512,10 @@ def run_audit(domain: str, allowlist_path: str = None, on_step=None,
     }
     if browser:
         result["accessibility_browser"] = step("browser_a11y", check_browser_accessibility, host)
+        result["cookies"] = step("cookies", check_cookies, host)
     elif on_step:
         on_step("browser_a11y", "skipped")
+        on_step("cookies", "skipped")
 
     home_status, _, home_html = home
     if "_unavailable" not in result["privacy"]:

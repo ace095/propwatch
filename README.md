@@ -22,6 +22,11 @@ passive scan, hand over the findings, close the paid engagement.
   each for accessibility issues, insecure `http://` resources and login forms (axe on the
   first 3). Use `--pages N` (0 = homepage only).
 
+- Cookies and trackers: loads the homepage with an empty browser profile and clicks nothing,
+  then reports every cookie (first or third party, purpose, Secure/HttpOnly, lifetime), every
+  outside company contacted, known analytics/advertising/social trackers (built-in list),
+  and whether a consent banner exists and offers a way to refuse. Flags tracking that starts
+  before consent. It does not test what happens after the visitor accepts or rejects.
 - Full-site option: `--full-site` (or `--pages 50`) keeps following links from the pages it
   visits, up to a hard ceiling of 200 pages, still respecting `robots.txt` and the rate
   limit. In the UI, pick the page count next to the domain.
