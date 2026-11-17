@@ -2,124 +2,132 @@
 
 ## Executive Summary
 
-This audit combines passive security, privacy, and accessibility reviews of owasp.org. Transport security is strong: TLS 1.3, HSTS with preload, a full set of security headers, and strict email authentication. No Critical or High issues were found. Three Medium-severity items need attention: a Content Security Policy that allows inline scripts, no detected privacy policy page, and images missing alt text. Several Low-severity hardening items concern email spoofing protection, technology disclosure, and cookie notice. All findings come from passive observation, so they indicate posture rather than prove the absence of vulnerabilities. The accessibility check in particular covers only basic HTML signals on one page, and a full WCAG audit is still needed.
-
-*Note on a difference between sections: the Security section reports that the HTTP-to-HTTPS redirect was confirmed by a dedicated check (308 to `https://owasp.org/`). The Privacy section notes that the header-based redirect check returned no result. The Security section explains this: the header check reported null, but the dedicated check confirmed the redirect.*
+This passive audit covers security, privacy, and accessibility for owasp.org. The site's technical foundation is strong: TLS 1.3, HSTS with preload, a full set of security headers, and strict email authentication (SPF `-all`, DMARC enforced). There are no Critical issues. The most severe finding is a **High** accessibility issue, insufficient colour contrast on body text. Three **Medium** items follow: a CSP that allows `'unsafe-inline'` scripts, no discoverable privacy policy, and no skip-to-content link. The remaining findings are Low or informational hardening and best-practice items. These results come from passive and automated checks only. They are not a penetration test or legal review, and manual accessibility testing and confirmation of DKIM signing are still recommended.
 
 ---
 
 ## Security
+**Transport & Infrastructure Security: owasp.org (Nonprofit)**
 
-# Transport & Infrastructure Security: owasp.org
+Overall, the passive findings indicate a strong transport and email-authentication posture. There are no Critical or High issues. A few low-to-medium hardening items remain.
 
-**Summary:** The passive findings indicate a strong transport security posture. There are no Critical or High issues. A few lower-severity hardening items are listed below.
+**What looks good**
+- **TLS:** TLS 1.3, with a Let's Encrypt certificate valid for 83 more days (expires Feb 9, 2027). This is normal for a short-lived, auto-renewed certificate.
+- **HTTP to HTTPS:** Plain HTTP returns a 308 redirect to `https://owasp.org/`. The `redirects_to_https: null` value in the header check is just the HTTPS response itself, not a gap.
+- **HSTS:** `max-age=31536000; includeSubDomains; preload`.
+- **Other headers:** X-Frame-Options (DENY), X-Content-Type-Options (nosniff), Referrer-Policy, Permissions-Policy and a CSP are all present. No headers are reported missing.
+- **Email authentication:** SPF ends in `-all` (hard fail) and DMARC is enforced at `p=quarantine` with reporting enabled.
 
-## What looks good
-- **TLS:** TLSv1.3, with a Let's Encrypt certificate valid for 83 more days (expires Feb 9, 2027).
-- **HTTP to HTTPS:** Plain HTTP returns a 308 redirect to `https://owasp.org/`. The header check reported `redirects_to_https: null`, but the dedicated redirect check confirms the redirect works.
-- **HSTS:** `max-age=31536000; includeSubDomains; preload`, which is a strong setting.
-- **Other headers:** X-Frame-Options (DENY), X-Content-Type-Options (nosniff), Referrer-Policy, and Permissions-Policy are all present. The CSP also sets `frame-ancestors 'none'`, `object-src 'none'`, and `upgrade-insecure-requests`.
-- **Email authentication:** SPF ends in `-all` (strict). DMARC is enforcing (`p=quarantine`) with reporting configured.
+**Issues**
 
-## Issues
+1. **CSP allows `'unsafe-inline'` for scripts: Medium**
+   - **Explanation:** `script-src 'self' 'unsafe-inline'` indicates the policy would not block injected inline scripts. That weakens the main protection a CSP gives against cross-site scripting (XSS). The rest of the policy is tight (`object-src 'none'`, `frame-ancestors 'none'`, `base-uri 'self'`).
+   - **Standard:** PCI-DSS Req. 6.4 and 11.6.1 (script control on payment pages, if donations are taken on-site), and general data-in-transit and web-app hardening expectations.
+   - **Fix:** Replace `'unsafe-inline'` with per-request nonces or hashes. Next.js supports nonce-based CSP through middleware. Consider `'strict-dynamic'` as well. Test in Report-Only mode first, using the existing `/api/csp-report` endpoint.
 
-### 1. CSP allows `'unsafe-inline'` for scripts (Medium)
-- **Explanation:** `script-src 'self' 'unsafe-inline'` lets inline scripts run. This weakens the CSP's main purpose, which is limiting the damage of a cross-site scripting (XSS) flaw. An injected inline script would not be blocked by the policy. This is a common trade-off with Next.js, but it is still a gap.
-- **Standard:** PCI-DSS Req. 6 (secure development) and 6.4 / 11.6 script controls if payment pages are in scope. It also bears on general data-in-transit and web-app protection expectations.
-- **Fix:** Move to nonce-based or hash-based CSP (Next.js supports nonces via middleware) and remove `'unsafe-inline'` from `script-src`. Use the existing `report-uri` to find breakage before enforcing.
+2. **DMARC is `quarantine`, not `reject`: Low**
+   - **Explanation:** Spoofed mail claiming to be from owasp.org would likely land in spam but is not rejected outright. For a well-known brand, that leaves a small phishing window.
+   - **Standard:** Anti-phishing best practice. State breach laws and PCI-DSS 12.6 are indirectly relevant, since phishing is a common breach entry point.
+   - **Fix:** Review the aggregate (`rua`) reports. Once all legitimate senders (Google, Mailchimp, Amazon SES) pass SPF or DKIM alignment, move to `p=reject`. Optionally step up gradually with `pct=`.
 
-### 2. DMARC policy is `quarantine`, not `reject` (Low)
-- **Explanation:** Spoofed mail that fails authentication is sent to spam rather than rejected outright. For a well-known organization, impersonation and phishing remain an attractive target.
-- **Standard:** Not a mandated requirement. It is a best practice for anti-phishing and donor/member trust.
-- **Fix:** Review the aggregate reports (`rua`) to confirm all legitimate senders (Google, Mailchimp, Amazon SES) pass. Then move to `p=reject`, optionally stepping up with `pct=`.
+3. **Technology disclosure in headers: Low (informational)**
+   - **Explanation:** `Server: Vercel` and `X-Powered-By: Next.js` reveal the platform and framework. This is not a vulnerability in itself, but it helps attackers target known issues.
+   - **Standard:** General hardening guidance (e.g., OWASP Secure Headers).
+   - **Fix:** Set `poweredByHeader: false` in `next.config.js`. The `Server` header on Vercel is generally not configurable, so treat that part as accepted.
 
-### 3. DKIM not verified (Low / informational)
-- **Explanation:** DKIM uses org-specific selectors, so this passive scan could not confirm it. This is a gap in the check, not evidence of a problem.
-- **Standard:** Supports DMARC alignment.
-- **Fix:** Have the mail administrator confirm DKIM signing is enabled for every sending service listed in SPF.
+4. **robots.txt lists sensitive-sounding paths: Low (informational)**
+   - **Explanation:** The disallow rules (`/admin`, `/dev`, `/auth`, `/dashboard`) suggest that these paths exist. This was not tested, and there is no evidence they are exposed.
+   - **Standard:** General information-disclosure hygiene.
+   - **Fix:** Don't rely on robots.txt for protection. Make sure these paths enforce authentication, and consider restricting `/dev` and `/admin` by network or SSO. Remove entries that don't need to be advertised.
 
-### 4. Technology disclosure in headers and robots.txt (Low)
-- **Explanation:** The response headers reveal `Server: Vercel` and `X-Powered-By: Next.js`. `robots.txt` also lists `/admin`, `/dashboard`, `/dev`, and `/auth`. This is not a vulnerability by itself, but it gives attackers a roadmap of the platform and likely sensitive paths.
-- **Standard:** General hardening (OWASP ASVS information-leakage guidance).
-- **Fix:** Disable the header with `poweredByHeader: false` in `next.config.js`. Make sure the listed paths require authentication and are not reachable in production (especially `/dev`). Don't rely on robots.txt for protection.
-
-### 5. Certificate renewal window (Informational)
-- **Explanation:** 83 days remaining is normal for Let's Encrypt's short-lived certificates. There is no sign of a problem, but a failed auto-renewal would eventually become a Critical outage.
-- **Standard:** PCI-DSS Req. 4 (strong cryptography in transit).
-- **Fix:** Confirm automated renewal is working and set up expiry monitoring or alerts, for example at 30 and 14 days.
-
-**Scope note:** These conclusions come only from passive observation. They suggest the configuration is sound but do not prove the absence of vulnerabilities.
+**Not verified**
+- DKIM was not checked, because it uses org-specific selectors. The mail admin should confirm that signing is active for all senders.
+- Certificate auto-renewal can't be confirmed passively. Keep expiry monitoring in place.
 
 ---
 
 ## Privacy
+## Privacy & Data-Handling Assessment: owasp.org
 
-## Privacy & Data-Handling Assessment: owasp.org (Nonprofit)
+These are passive findings only. They indicate how the site is configured but are not a penetration test or a legal review.
 
-These are passive observations only. They indicate posture but do not show how data is handled behind the scenes.
-
-**Overall:** The privacy posture looks reasonably strong in the technical controls. The main gap is that no privacy policy page was detected.
-
-### Issue 1: No privacy policy page detected
+### Issue 1: No privacy policy page or links detected
 - **Severity:** Medium
-- **Explanation:** The passive scan found no privacy policy page (`policy_pages_found` is empty). The site does mention cookies, which suggests some cookie or storage use that visitors should be told about. The site also connects to Supabase, which suggests user or account data may be handled. A policy may exist at a path the scan did not check, so this indicates a possible gap rather than confirming one.
-- **Standard:** CCPA/GDPR (transparency and notice requirements). FERPA and COPPA are not clearly relevant to a general nonprofit site, but would apply if the site knowingly collects data from children under 13.
-- **Fix:** Publish a clear privacy policy and link it from the site footer on every page. It should cover what data is collected, why, who receives it (e.g., Supabase, YouTube, Vimeo, Google), retention, and how visitors can exercise their rights. Also confirm whether a policy already exists at a non-standard URL and make it easy to find.
+- **What we found:** The passive scan found no privacy or policy pages and no policy links (`policy_pages_found` and `policy_links_found` are both empty). The site does mention cookies (`mentions_cookies: true`), which suggests some cookie or tracking disclosure exists somewhere, but we found no linked policy.
+- **Why it matters:** Visitors may not be able to learn what data is collected, why, or how to exercise their rights. The site also connects to a Supabase backend and embeds YouTube, Vimeo, and Google Calendar content. Those services can receive visitor data such as IP addresses.
+- **Standard:** CCPA/GDPR (transparency and notice requirements). COPPA and FERPA are probably not directly relevant for this nonprofit, unless the site knowingly serves children under 13.
+- **Fix:** Publish a clear privacy policy and link it from the site-wide footer. It should cover:
+  - what is collected (accounts, forms, logs);
+  - the third parties involved (Supabase, YouTube, Vimeo, Google);
+  - cookie use;
+  - retention periods;
+  - how to contact the organization about data requests.
 
-### Issue 2: Cookies mentioned, but no cookie banner/consent mechanism detected
+  If a policy already exists but wasn't detected (for example, it's rendered by JavaScript), make sure it is reachable through a standard footer link.
+
+### Issue 2: Cookies mentioned, but no consent mechanism detected
 - **Severity:** Low
-- **Explanation:** The site mentions cookies, but no cookie banner hint was detected. No analytics were detected (`has_analytics: false`), so the consent risk is lower than for a site loading trackers with no notice. Embedded third-party content (YouTube, Vimeo, Google Calendar) can still set cookies or share visitor data, and the site's CSP permits these. The CSP does list `youtube-nocookie.com`, which is a privacy-friendly choice, if that domain is actually used for embeds.
-- **Standard:** GDPR/ePrivacy and CCPA (consent and notice for non-essential cookies).
-- **Fix:** Confirm which cookies are set. If only strictly necessary ones are used, document that in the privacy policy. If embeds set non-essential cookies, load them only after consent (click-to-load) or use the `youtube-nocookie.com` domain consistently.
+- **What we found:** The site mentions cookies, but no cookie banner was detected (`cookie_banner_hint: false`). **No analytics was detected** (`has_analytics: false`), so there is no evidence of tracking that would require prior consent.
+- **Why it matters:** If only strictly necessary cookies are used, a consent banner may not be required. However, the cookie mention and the third-party embeds (YouTube, Vimeo) could set cookies or transmit data once loaded. This is a possible gap, not a confirmed violation.
+- **Standard:** GDPR/ePrivacy and CCPA (consent and disclosure for non-essential cookies).
+- **Fix:** Audit which cookies are actually set. If any are non-essential, add a consent mechanism. Document the cookies in the privacy policy. Using `youtube-nocookie.com` (already allowed in the CSP) for all YouTube embeds reduces tracking exposure.
 
-### Positive findings (no action needed)
-- **Referrer policy:** `strict-origin-when-cross-origin` limits URL leakage to other sites. No evidence of a permissive setting.
-- **Permissions-Policy:** Camera, microphone, and geolocation are disabled, and `interest-cohort=()` opts out of FLoC-style tracking. This supports visitor privacy.
-- **No analytics detected:** No evidence of third-party analytics tracking visitors.
-- **Transport security:** HSTS with preload and `upgrade-insecure-requests` protect data in transit. (The HTTPS redirect check returned no result, so it was not confirmed.)
-- **Email authentication:** SPF uses a strict `-all`, and DMARC is set to `quarantine` with reporting. This helps protect supporters from spoofed emails. DKIM was not verified by this scan.
+### Positive findings
+- **Referrer policy:** `strict-origin-when-cross-origin` is a sound setting. It limits URL leakage to other sites, so there is no concern here.
+- **Permissions-Policy:** Camera, microphone, and geolocation are disabled, and `interest-cohort=()` opts out of FLoC-style ad profiling. This is privacy-protective.
+- **Transport and framing protections:** HSTS (with preload), a restrictive CSP (`frame-ancestors 'none'`, `object-src 'none'`), `X-Frame-Options: DENY`, and `nosniff` are all present. No security headers were reported missing.
+- **Email authentication:** SPF uses a strict `-all`, and DMARC is set to `p=quarantine` with reporting enabled. This reduces the risk of spoofed email that could be used to phish constituents. DKIM was not verified and needs confirmation by the mail administrator.
 
-### Notes
-- The CSP allows `'unsafe-inline'` for scripts. This is primarily a security matter rather than a privacy one, but it weakens protection against script injection that could expose visitor data.
-- The CSP `report-uri` collects violation reports. If those reports contain visitor details such as URLs or IPs, mention it in the privacy policy.
+### Minor note
+- The CSP allows `'unsafe-inline'` for scripts. This is primarily a security hardening matter, not a privacy one, and is outside this section's scope. It is noted only for the security review.
+- `redirects_to_https` was not determined (null), so it was not checked here. HSTS being present suggests HTTPS is enforced.
+
+### Summary
+The main gap is the apparent absence of a discoverable privacy policy (Medium). Headers and email authentication are well configured, and no analytics or tracking was detected.
 
 ---
 
 ## Accessibility
+## Accessibility Assessment: owasp.org (Nonprofit)
 
-## Accessibility Assessment: owasp.org (Passive Signals Only)
+These are passive findings from static HTML checks and an axe-core 4.12.1 browser run, which included a keyboard Tab test. Overall, the results suggest a fairly solid baseline: 23 axe rules passed, with one serious violation and two lower-severity structural issues. Automated tools catch only part of the possible issues, so manual review is still advised (axe flagged 1 item as `needs_manual_review`).
 
-This is a limited, passive check of the page's HTML (parsed with BeautifulSoup). It indicates some basic accessibility hygiene but is not a substitute for a full WCAG 2.1 AA audit.
+### Issues
 
-### Issue 1: Images missing alt text
-- **Severity:** Medium
-- **What we found:** 3 of the 8 images (about 38%) have no alt attribute.
-- **Why it matters:** Screen reader users get no description of these images, or hear the file name instead. If the images carry meaning (charts, logos, calls to action, linked images), that information is lost to blind and low-vision visitors. For a nonprofit with a public education mission, this directly affects who can use its content.
-- **Standard:** WCAG 2.1 SC 1.1.1 Non-text Content (Level A), relevant to ADA compliance.
-- **Fix:**
-  - Add concise, meaningful alt text to informative images (e.g., `alt="OWASP Top 10 project logo"`).
-  - For purely decorative images, use an empty `alt=""` so assistive technology skips them.
-  - For images inside links or buttons, make the alt text describe the destination or action.
-  - Add a template or CI check so new content cannot be published without alt attributes.
-  - Note: this check cannot tell whether the 3 images are decorative, so some may only need `alt=""`.
+**1. Insufficient colour contrast on body text: High**
+- **What it is:** One paragraph ("Stay connected with the global AppSec community through O…") uses the `text-ink-muted` colour class. axe reports that its text/background contrast falls below the minimum threshold. This indicates some users with low vision or colour-vision deficiencies, or anyone reading in bright light, may struggle to read it.
+- **Standard:** WCAG 2.1 AA, 1.4.3 Contrast (Minimum): 4.5:1 for normal text.
+- **Fix:** Darken the `text-ink-muted` colour (or lighten the background) until the ratio is at least 4.5:1. Check the same token anywhere else it's used, since only one element was flagged here but the muted colour may be reused elsewhere on other pages or states.
 
-### Items that passed
-- **Language attribute:** The `lang` attribute is present on the page. This supports correct screen reader pronunciation (WCAG 3.1.1). This check did not verify that the value is correct.
-- **Page title:** A page title is present (WCAG 2.4.2). This check did not assess whether it is descriptive or unique.
+**2. No skip-to-content link: Medium**
+- **What it is:** The static check found no skip link near the top of the page. Keyboard and screen-reader users may have to tab through the whole navigation on every page before reaching the main content. This matters here because the keyboard test found 100 focusable elements on the page.
+- **Standard:** WCAG 2.1 A, 2.4.1 Bypass Blocks.
+- **Fix:** Add a "Skip to main content" link as the first focusable element, pointing to the `<main>` landmark (e.g. `<a href="#main">`). It can be visually hidden until focused.
 
-### Important limitation
-These results come only from passive HTML signals on the page tested. They say nothing about color contrast, keyboard navigation, focus order, form labels, ARIA usage, heading structure, link text quality, or dynamic content. **A full audit with axe-core or Pa11y, plus manual testing with a screen reader and keyboard-only navigation, is still needed** to assess WCAG 2.1 AA conformance. A single page's results also may not represent the rest of the site.
+**3. Multiple h1 elements (3 found): Low**
+- **What it is:** The page has three `<h1>` elements rather than one. This can blur the page's heading hierarchy for screen-reader users who navigate by headings. Note that HTML5 doesn't strictly forbid multiple h1s, so this is a best-practice concern more than a hard failure.
+- **Standard:** WCAG 2.1 A, 1.3.1 Info and Relationships; AA, 2.4.6 Headings and Labels.
+- **Fix:** Use a single `<h1>` for the main page topic and demote the others to `<h2>`/`<h3>` to reflect the actual structure.
+
+### Keyboard and Other Checks (No Issues Found)
+- **Visible focus:** No elements without a visible focus style were found (`no_visible_focus_style` is empty), which suggests focus indication is handled well (WCAG 2.4.7).
+- **Keyboard traps:** No evidence of a keyboard trap (WCAG 2.1.2).
+- **Coverage note:** The Tab test reached 60 of 100 focusable elements within the 60 presses checked. This is a test limit, not a finding, but the remaining 40 were not verified by this test.
+- **Basics:** The page has a `lang` attribute and a title, and all 8 images have alt text (WCAG 3.1.1, 2.4.2, 1.1.1). Alt text presence doesn't confirm that the text is meaningful.
+
+### Recommended Next Step
+Fix the contrast issue first, then add the skip link. Follow up with manual testing (screen reader, keyboard-only navigation across the full page, and the 1 axe item flagged for review) to cover what automation can't.
 
 ---
 
 ## Top 5 Fixes (Ordered by Severity)
 
-The first three items are all Medium severity and are listed in no strict order of priority among themselves. Items 4 and 5 are Low severity.
+| # | Fix | Area | Severity |
+|---|-----|------|----------|
+| 1 | **Raise colour contrast** on the `text-ink-muted` token to at least 4.5:1, and check other places the token is used. | Accessibility | High |
+| 2 | **Remove `'unsafe-inline'` from the CSP `script-src`**, using nonces or hashes (and optionally `'strict-dynamic'`). Test in Report-Only mode via `/api/csp-report` first. | Security | Medium |
+| 3 | **Publish a privacy policy** and link it from the site-wide footer. It should name third parties (Supabase, YouTube, Vimeo, Google), cookie use, retention, and a contact for data requests. If one already exists, make it reachable by a standard footer link. | Privacy | Medium |
+| 4 | **Add a skip-to-content link** as the first focusable element, pointing to the `<main>` landmark. | Accessibility | Medium |
+| 5 | **Audit the cookies actually set**, add consent if any are non-essential, document them in the privacy policy, and use `youtube-nocookie.com` for all YouTube embeds. | Privacy | Low |
 
-1. **Remove `'unsafe-inline'` from the CSP `script-src` (Medium, Security).** Move to a nonce- or hash-based policy, using the existing `report-uri` to catch breakage before enforcing.
-2. **Publish and link a privacy policy (Medium, Privacy).** First confirm whether one already exists at a non-standard URL. It should cover data collected, recipients (e.g., Supabase, YouTube, Vimeo, Google), retention, visitor rights, and cookie use.
-3. **Add alt text to the 3 images missing it (Medium, Accessibility).** Use descriptive text for informative images and `alt=""` for decorative ones. Add a template or CI check to prevent regressions.
-4. **Reduce technology disclosure and verify the paths listed in robots.txt (Low, Security).** Set `poweredByHeader: false`, and confirm that `/admin`, `/dashboard`, `/dev`, and `/auth` require authentication and that `/dev` is not reachable in production.
-5. **Move DMARC from `quarantine` to `reject` (Low, Security).** Review aggregate reports first to confirm that all legitimate senders (Google, Mailchimp, Amazon SES) pass, and have the mail administrator confirm DKIM signing for each sender.
-
-*Also worth tracking, though lower priority: confirm which cookies are set and how embeds are loaded (Privacy, Low), and set up certificate expiry monitoring (Security, Informational).*
+**Next in line (all Low):** move DMARC to `p=reject` after reviewing `rua` reports, consolidate to a single `<h1>`, set `poweredByHeader: false`, and review the paths listed in robots.txt. Also confirm DKIM signing with the mail administrator, and complete manual accessibility testing.

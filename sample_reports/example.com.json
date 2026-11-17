@@ -1,6 +1,6 @@
 {
   "target": "example.com",
-  "scanned_at": "2026-11-17T07:10:21.440785+00:00",
+  "scanned_at": "2026-11-17T08:17:30.035420+00:00",
   "scan_type": "passive",
   "robots": {
     "found": false,
@@ -46,7 +46,8 @@
     "policy_pages_found": [],
     "mentions_cookies": false,
     "has_analytics": false,
-    "cookie_banner_hint": false
+    "cookie_banner_hint": false,
+    "policy_links_found": []
   },
   "accessibility": {
     "engine": "beautifulsoup",
@@ -54,6 +55,54 @@
     "page_has_title": true,
     "images_total": 0,
     "images_missing_alt": 0,
-    "note": "Run axe-core/Pa11y for a full WCAG 2.1 AA audit."
-  }
+    "issue_count": 2,
+    "issues": [
+      {
+        "rule": "Page should have exactly one h1",
+        "wcag": "1.3.1 / 2.4.6",
+        "count": 1,
+        "examples": [
+          "0 h1 elements"
+        ]
+      },
+      {
+        "rule": "No skip-to-content link near top of page",
+        "wcag": "2.4.1",
+        "count": 1,
+        "examples": [
+          "no skip link found"
+        ]
+      }
+    ],
+    "note": "Static HTML checks only (no colour contrast or keyboard testing). Run axe-core/Pa11y for a full WCAG 2.1 AA audit."
+  },
+  "accessibility_browser": {
+    "violations": [],
+    "violation_rules": 0,
+    "violation_elements": 0,
+    "by_impact": {
+      "critical": 0,
+      "serious": 0,
+      "moderate": 0,
+      "minor": 0
+    },
+    "rules_passed": 9,
+    "needs_manual_review": 1,
+    "keyboard": {
+      "focusable_elements": 1,
+      "reached_by_tab": 1,
+      "tab_presses_checked": 6,
+      "no_visible_focus_style": [],
+      "possible_keyboard_trap": null
+    },
+    "engine": "axe-core 4.12.1 in a real browser",
+    "url": "https://example.com/"
+  },
+  "crawl": {
+    "discovered": 0,
+    "scanned": 0,
+    "blocked_by_robots": 0,
+    "limit": 5
+  },
+  "pages": []
 }
