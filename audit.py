@@ -327,9 +327,10 @@ def main():
     data = run_audit(args.domain)
     text = json.dumps(data, indent=2, default=str)
     if args.json:
-        with open(args.json, "w") as f:
+        with open(args.json, "w", encoding="utf-8") as f:
             f.write(text)
         log.info("Wrote %s", args.json)
+    sys.stdout.reconfigure(encoding="utf-8")
     print(text)
 
 

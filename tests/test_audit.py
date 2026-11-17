@@ -167,6 +167,20 @@ class RetryOnTransientFailure(unittest.TestCase):
         self.assertEqual(opener.open.call_count, 1)
 
 
+class ReportOutputEncoding(unittest.TestCase):
+    def test_unicode_report_is_written_as_utf8(self):
+        import json, tempfile, report
+        with tempfile.TemporaryDirectory() as d:
+            findings, out = os.path.join(d, "f.json"), os.path.join(d, "r.md")
+            with open(findings, "w", encoding="utf-8") as f:
+                json.dump({"target": "x.test"}, f)
+            argv = ["report.py", "--json", findings, "--single", "--out", out]
+            with mock.patch.object(sys, "argv", argv),                  mock.patch.object(report, "_client"),                  mock.patch.object(report, "report_single", return_value="HTTP → HTTPS"):
+                report.main()
+            with open(out, encoding="utf-8") as f:
+                self.assertEqual(f.read(), "HTTP → HTTPS")
+
+
 class Logging(unittest.TestCase):
     def test_failed_fetch_is_logged(self):
         with self.assertLogs("webaudit", level="WARNING") as cm:

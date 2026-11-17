@@ -1,23 +1,32 @@
 {
   "target": "neverssl.com",
-  "scanned_at": "2026-11-17T05:35:31.444638+00:00",
+  "scanned_at": "2026-11-17T07:07:08.935303+00:00",
   "scan_type": "passive",
   "robots": {
     "found": false,
     "disallow_rules": []
   },
   "tls": {
-    "reachable": false,
-    "error": "[Errno -2] Name or service not known"
+    "reachable": true,
+    "tls_version": "TLSv1.3",
+    "cert_expires": "May 25 23:59:59 2027 GMT",
+    "days_until_expiry": 189,
+    "issuer": {
+      "countryName": "US",
+      "organizationName": "Amazon",
+      "commonName": "Amazon RSA 2048 M04"
+    }
   },
   "headers": {
     "_unavailable": "Could not fetch https://neverssl.com/ (Remote end closed connection without response)."
   },
   "http_redirect": {
-    "_unavailable": "Could not fetch http://neverssl.com/ (<urlopen error [Errno -2] Name or service not known>)."
+    "_unavailable": "Could not fetch http://neverssl.com/ (<urlopen error timed out>)."
   },
   "email_auth": {
-    "_unavailable": "DNS lookup failed or no resolver available (install dnspython or dig); SPF/DMARC status unknown."
+    "spf": null,
+    "dmarc": null,
+    "dkim_note": "DKIM uses org-specific selectors; verify with their mail admin."
   },
   "privacy": {
     "_unavailable": "Could not fetch homepage; privacy signals unknown."

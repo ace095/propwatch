@@ -1,6 +1,6 @@
 {
   "target": "owasp.org",
-  "scanned_at": "2026-11-17T06:10:38.291342+00:00",
+  "scanned_at": "2026-11-17T07:06:43.608331+00:00",
   "scan_type": "passive",
   "robots": {
     "found": true,
@@ -40,9 +40,9 @@
     "powered_by": "Next.js"
   },
   "http_redirect": {
-    "http_status": 200,
-    "redirects_to_https": false,
-    "location": null
+    "http_status": 308,
+    "redirects_to_https": true,
+    "location": "https://owasp.org/"
   },
   "email_auth": {
     "spf": "v=spf1 include:_spf.google.com include:servers.mcsv.net include:amazonses.com -all",

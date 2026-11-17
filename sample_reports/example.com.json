@@ -1,18 +1,36 @@
 {
   "target": "example.com",
-  "scanned_at": "2026-11-17T06:10:38.143669+00:00",
+  "scanned_at": "2026-11-17T07:10:21.440785+00:00",
   "scan_type": "passive",
   "robots": {
     "found": false,
     "disallow_rules": []
   },
   "tls": {
-    "reachable": false,
-    "cert_valid": false,
-    "error": "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1000)"
+    "reachable": true,
+    "tls_version": "TLSv1.3",
+    "cert_expires": "Dec 25 22:56:35 2026 GMT",
+    "days_until_expiry": 38,
+    "issuer": {
+      "countryName": "US",
+      "organizationName": "SSL Corporation",
+      "commonName": "Cloudflare TLS Issuing ECC CA 3"
+    }
   },
   "headers": {
-    "_unavailable": "Could not fetch https://example.com/ (<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1000)>)."
+    "http_status": 200,
+    "redirects_to_https": null,
+    "present": {},
+    "missing": {
+      "strict-transport-security": "HSTS \u2014 forces HTTPS",
+      "content-security-policy": "CSP \u2014 mitigates XSS/injection",
+      "x-frame-options": "Clickjacking protection",
+      "x-content-type-options": "MIME-sniffing protection",
+      "referrer-policy": "Controls referrer leakage",
+      "permissions-policy": "Restricts browser features"
+    },
+    "server": "cloudflare",
+    "powered_by": null
   },
   "http_redirect": {
     "http_status": 200,
@@ -25,9 +43,17 @@
     "dkim_note": "DKIM uses org-specific selectors; verify with their mail admin."
   },
   "privacy": {
-    "_unavailable": "Could not fetch homepage; privacy signals unknown."
+    "policy_pages_found": [],
+    "mentions_cookies": false,
+    "has_analytics": false,
+    "cookie_banner_hint": false
   },
   "accessibility": {
-    "_unavailable": "Could not fetch homepage HTML."
+    "engine": "beautifulsoup",
+    "has_lang_attribute": true,
+    "page_has_title": true,
+    "images_total": 0,
+    "images_missing_alt": 0,
+    "note": "Run axe-core/Pa11y for a full WCAG 2.1 AA audit."
   }
 }

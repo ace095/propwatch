@@ -156,13 +156,16 @@ def main():
     ap.add_argument("--out", metavar="FILE", help="write the report to a file")
     args = ap.parse_args()
 
-    findings = json.load(open(args.json)) if args.json else collect(args.domain)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    findings = (json.load(open(args.json, encoding="utf-8")) if args.json
+                else collect(args.domain))
     client = _client()
     report = (report_single if args.single else report_agents)(
         client, args.sector, findings)
 
     if args.out:
-        with open(args.out, "w") as f:
+        with open(args.out, "w", encoding="utf-8") as f:
             f.write(report)
         print(f"[*] Wrote {args.out}", file=sys.stderr)
     print(report)
