@@ -78,6 +78,70 @@ class Discovery(unittest.TestCase):
         get.assert_not_called()
 
 
+SITE = {  # a small fake site: page -> links on it
+    "/": ["/a", "/private/x"],
+    "/a": ["/b", "/c", "/private/y", "https://other.test/z"],
+    "/b": ["/d", "/a"],
+    "/c": ["/e"],
+    "/d": [], "/e": [],
+}
+
+
+def fake_site_get(url, follow_redirects=True, retries=1):
+    if url.endswith("/robots.txt"):
+        return 200, {}, "User-agent: *\nDisallow: /private\n"
+    if url.endswith("/sitemap.xml"):
+        return 404, {}, ""
+    path = "/" + url.split("//", 1)[1].split("/", 1)[1]
+    path = path if path == "/" else path.rstrip("/")
+    if path not in SITE:
+        return 404, {}, ""
+    links = "".join(f'<a href="{h}">l</a>' for h in SITE[path])
+    return 200, {}, f"<html lang='en'><title>{path}</title><h1>x</h1>{links}</html>"
+
+
+class FullSiteCrawl(unittest.TestCase):
+    def crawl(self, limit):
+        with mock.patch.object(audit, "_get", side_effect=fake_site_get):
+            home = fake_site_get("https://x.test/")[2]
+            return crawler.scan_pages("x.test", home, limit=limit, browser=False)
+
+    def paths(self, result):
+        return [p["url"].replace("https://x.test", "") for p in result["pages"]]
+
+    def test_follows_links_beyond_the_homepage_up_to_the_limit(self):
+        result = self.crawl(10)
+        self.assertEqual(sorted(self.paths(result)), ["/a", "/b", "/c", "/d", "/e"])
+
+    def test_stops_at_the_limit(self):
+        result = self.crawl(3)
+        self.assertEqual(len(result["pages"]), 3)
+        self.assertEqual(result["crawl"]["limit"], 3)
+
+    def test_never_follows_robots_disallowed_or_external_links(self):
+        paths = self.paths(self.crawl(50))
+        self.assertFalse(any(p.startswith("/private") for p in paths))
+        self.assertFalse(any("other.test" in p for p in paths))
+
+    def test_no_page_is_fetched_twice(self):
+        with mock.patch.object(audit, "_get", side_effect=fake_site_get) as get:
+            crawler.scan_pages("x.test", fake_site_get("https://x.test/")[2], limit=50, browser=False)
+        pages = [c.args[0] for c in get.call_args_list if not c.args[0].endswith(("robots.txt", "sitemap.xml"))]
+        self.assertEqual(len(pages), len(set(pages)))
+
+    def test_limit_is_capped_however_large(self):
+        result = self.crawl(10**6)
+        self.assertEqual(result["crawl"]["limit"], crawler.MAX_PAGE_LIMIT)
+
+    def test_axe_runs_only_on_the_first_few_pages_even_for_big_crawls(self):
+        import browser_audit
+        axe = {"violation_rules": 0, "by_impact": {}, "violations": [], "keyboard": {"possible_keyboard_trap": None}}
+        with mock.patch.object(audit, "_get", side_effect=fake_site_get), \
+             mock.patch.object(browser_audit, "run_browser_audit", return_value=axe) as run_axe:
+            crawler.scan_pages("x.test", fake_site_get("https://x.test/")[2], limit=50, browser=True)
+        self.assertEqual(run_axe.call_count, crawler.MAX_BROWSER_PAGES)
+
+
 class PageAnalysis(unittest.TestCase):
     def test_flags_mixed_content_forms_and_accessibility(self):
         html = ('<html lang="en"><title>Pay</title><body><h1>Pay</h1>'
@@ -120,7 +184,8 @@ class ScanPages(unittest.TestCase):
                                return_value={"urls": ["https://x.test/a"], "discovered": 1, "blocked_by_robots": 0}), \
              mock.patch.object(audit, "_get", return_value=(None, {"_error": "x"}, "")):
             result = crawler.scan_pages("x.test", "", browser=False)
-        self.assertEqual(result["pages"], [{"url": "https://x.test/a", "status": None, "error": "could not fetch"}])
+        self.assertEqual(result["pages"], [{"url": "https://x.test/a", "status": None,
+                                            "error": "could not fetch", "reason": "unknown_error"}])
 
     def test_run_audit_can_skip_the_crawl(self):
         steps = []

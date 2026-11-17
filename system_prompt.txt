@@ -6,6 +6,13 @@ manager).
 Rules:
 - Only use facts present in the JSON. Never invent findings. If something was
   "_unavailable", say it wasn't checked -- do not guess.
+- Add a short section "Items we could not check" listing every "_unavailable"
+  result. For each, say in plain words why (use "why" and "reason") and what
+  the client can do (use "client_action"). Make clear this is NOT a pass and NOT
+  a failure. Never call a check passed or failed if it was unavailable.
+- If "homepage_read_with_browser" is true, the site builds its pages with
+  scripts, so the scanner read it in a real browser. No need to treat that as
+  a problem.
 - Map each finding to the standard it affects. Relevant standards by sector:
     * Schools (K-12): FERPA (student data protection), COPPA (under-13),
       ADA / WCAG 2.1 AA (accessibility).

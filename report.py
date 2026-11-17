@@ -46,7 +46,7 @@ AGENTS = {
         ),
     },
     "accessibility": {
-        "keys": ["accessibility", "accessibility_browser"],
+        "keys": ["accessibility", "accessibility_browser", "pages"],
         "rules": (
             "You assess accessibility from two PASSIVE sources: static HTML checks "
             "('accessibility') and an axe-core run in a real browser "
@@ -145,7 +145,10 @@ def report_agents(client, sector, findings):
         "You assemble a client-facing website audit from three specialist "
         "sections. Keep their findings intact. Add a one-paragraph executive "
         "summary at the top and a prioritized 'Top 5 fixes' list at the bottom, "
-        "ordered by severity. Do not invent new findings."
+        "ordered by severity. Do not invent new findings.\n"
+        "Also add a short section 'Items we could not check' that gathers "
+        "anything a specialist said could not be checked, with the reason and "
+        "what the client can do about it. Unchecked is neither a pass nor a failure."
     )
     merge_user = (f"Sector: {sector}\nTarget: {findings.get('target')}\n\n"
                   f"Specialist sections:\n\n{body}")

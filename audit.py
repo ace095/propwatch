@@ -22,6 +22,7 @@ The script degrades gracefully and tells you what it couldn't check.
 import os
 import re
 import sys
+import unknowns
 import ssl
 import json
 import socket
@@ -176,15 +177,37 @@ SECURITY_HEADERS = {
 }
 
 
-def _fetch_home(host: str):
-    return _get(f"https://{host}/")
+def _fetch_home(host: str, render: bool = True):
+    """Fetch the homepage. A page that scripts build is re-read in a real browser.
+
+    Never used to get past a refusal: 401/403/429 are reported as blocked.
+    """
+    url = f"https://{host}/"
+    status, headers, body = _get(url)
+    if status in unknowns.BLOCKED_STATUSES:
+        log.warning("%s refused the scanner with HTTP %s; not guessing from its error page", host, status)
+        return None, {"_error": f"HTTP {status}", "_status": status}, ""
+    if render and status == 200:
+        import browser_audit
+        if browser_audit.looks_js_rendered(body):
+            log.info("%s builds its content with scripts; reading it in a real browser", host)
+            rendered = browser_audit.render_page(url)
+            if rendered and rendered[0] == 200:
+                rendered[1]["_rendered"] = "browser"
+                return rendered
+    return status, headers, body
+
+
+def _home_unavailable(what: str, headers: dict, url: str) -> dict:
+    error = headers.get("_error", "unknown error")
+    return unknowns.unavailable(f"Could not fetch {url} ({error}); {what} unknown.",
+                                unknowns.classify(error, headers.get("_status")))
 
 
 def check_headers(host: str, home=None) -> dict:
     status, headers, _ = home or _fetch_home(host)
     if status is None:
-        return {"_unavailable": f"Could not fetch https://{host}/ "
-                                f"({headers.get('_error', 'unknown error')})."}
+        return _home_unavailable("security headers", headers, f"https://{host}/")
     present, missing = {}, {}
     for h, why in SECURITY_HEADERS.items():
         if h in headers:
@@ -205,8 +228,7 @@ def check_http_redirect(host: str) -> dict:
     """Does plain http:// redirect to https://?"""
     status, headers, _ = _get(f"http://{host}/", follow_redirects=False)
     if status is None:
-        return {"_unavailable": f"Could not fetch http://{host}/ "
-                                f"({headers.get('_error', 'unknown error')})."}
+        return _home_unavailable("the HTTP to HTTPS redirect", headers, f"http://{host}/")
     loc = headers.get("location", "")
     return {"http_status": status, "redirects_to_https": loc.startswith("https://"),
             "location": loc or None}
@@ -246,8 +268,8 @@ def check_email_auth(host: str) -> dict:
     out = {}
     spf = _txt_records(host, must_exist=True)
     if spf is None:
-        return {"_unavailable": "DNS lookup failed or no resolver available "
-                                "(install dnspython or dig); SPF/DMARC status unknown."}
+        return unknowns.unavailable("DNS lookup failed or no resolver available "
+                                    "(install dnspython or dig); SPF/DMARC status unknown.", "dns")
     out["spf"] = next((r for r in spf if r.lower().startswith("v=spf1")), None)
     dmarc = _txt_records(f"_dmarc.{host}")
     if dmarc is None:
@@ -267,9 +289,9 @@ POLICY_PATHS = ["/privacy", "/privacy-policy", "/privacy.html",
 
 
 def check_privacy(host: str, home=None) -> dict:
-    status, _, home = home or _fetch_home(host)
+    status, headers, home = home or _fetch_home(host)
     if status is None:
-        return {"_unavailable": "Could not fetch homepage; privacy signals unknown."}
+        return _home_unavailable("privacy signals", headers, f"https://{host}/")
     found = {}
     for p in POLICY_PATHS:
         status, _, _ = _get(f"https://{host}{p}")
@@ -386,17 +408,19 @@ def check_accessibility(host: str, home=None) -> dict:
     Signal-level only. A real WCAG audit needs axe-core/Pa11y (Node).
     This flags a few cheap, high-confidence issues from the homepage HTML.
     """
-    _, _, html = home or _fetch_home(host)
+    status, headers, html = home or _fetch_home(host)
     if not html:
-        return {"_unavailable": "Could not fetch homepage HTML."}
+        if status is None:
+            return _home_unavailable("accessibility", headers, f"https://{host}/")
+        return unknowns.unavailable(f"The homepage returned no content (HTTP {status}); accessibility unknown.",
+                                    unknowns.classify("", status) if status >= 400 else "unknown_error")
     try:
         from bs4 import BeautifulSoup  # type: ignore
         return analyze_html(BeautifulSoup(html, "html.parser"))
     except ImportError:
-        return {
-            "_unavailable": "Install beautifulsoup4 for HTML parsing.",
-            "crude_missing_alt_guess": html.count("<img") - html.lower().count("alt="),
-        }
+        out = unknowns.unavailable("Install beautifulsoup4 for HTML parsing.", "missing_tool")
+        out["crude_missing_alt_guess"] = html.count("<img") - html.lower().count("alt=")
+        return out
 
 
 # ---------- authorization ----------
@@ -466,11 +490,12 @@ def run_audit(domain: str, allowlist_path: str = None, on_step=None,
         return out
 
     robots = step("robots", check_robots, host)
-    home = step("homepage", _fetch_home, host)
+    home = step("homepage", _fetch_home, host, browser)
     result = {
         "target": host,
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": "passive",
+        "homepage_read_with_browser": home[1].get("_rendered") == "browser",
         "robots": robots,
         "tls": step("tls", check_tls, host),
         "headers": step("headers", check_headers, host, home),
@@ -501,6 +526,8 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true", help="log every request")
     ap.add_argument("--pages", type=int, default=5, metavar="N",
                     help="extra same-site pages to check beyond the homepage (default 5, 0 = none)")
+    ap.add_argument("--full-site", action="store_true",
+                    help="check up to 50 pages, following links (same as --pages 50; slower)")
     ap.add_argument("--no-browser", action="store_true",
                     help="skip the real-browser accessibility audit (faster)")
     ap.add_argument("--allowlist", metavar="FILE",
@@ -510,7 +537,8 @@ def main():
                         format="%(levelname)s %(message)s", stream=sys.stderr)
 
     try:
-        data = run_audit(args.domain, args.allowlist, browser=not args.no_browser, pages=args.pages)
+        data = run_audit(args.domain, args.allowlist, browser=not args.no_browser,
+                         pages=50 if args.full_site else args.pages)
     except TargetNotAuthorized as e:
         log.error("%s", e)
         sys.exit(2)

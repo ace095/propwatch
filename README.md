@@ -22,6 +22,17 @@ passive scan, hand over the findings, close the paid engagement.
   each for accessibility issues, insecure `http://` resources and login forms (axe on the
   first 3). Use `--pages N` (0 = homepage only).
 
+- Full-site option: `--full-site` (or `--pages 50`) keeps following links from the pages it
+  visits, up to a hard ceiling of 200 pages, still respecting `robots.txt` and the rate
+  limit. In the UI, pick the page count next to the domain.
+- Script-built sites: if the homepage is an empty shell that scripts fill in, it is re-read
+  in a real browser (which also gives the true response headers). This is never used to
+  get past a refusal.
+- Nothing is silently "unknown": every check that could not run says why (dns, timeout,
+  connection, tls, blocked, server_error, missing_tool) and what the client can do about it.
+  A site that answers 401/403/429 is reported as *blocked*, not judged from its error page.
+  We do not try to defeat bot protection; the client allows our scanner instead.
+
 ## What it deliberately does NOT do
 No login testing, no vuln probing, no port scans, no payloads. Passive only.
 Running active tests on a site you don't own/weren't authorized to test can be
@@ -101,7 +112,8 @@ python pdf_export.py report.md report.pdf    # convert an existing markdown repo
 
 ## Tests
 ```bash
-python -m unittest tests.test_audit tests.test_ui -v   # offline: network and Claude API mocked, runs anywhere (seconds)
+python -m unittest tests.test_audit tests.test_crawler tests.test_scheduler tests.test_ui tests.test_browser_local -v
+# ^ offline: network and Claude API mocked (about 30 seconds); test_browser_local uses your Edge/Chrome on a local page
 python -m unittest tests.test_live -v    # live: scans real test sites (about 2 minutes)
 WEBAUDIT_LOG=1 python -m unittest tests.test_live -v   # same, with every request logged
 ```

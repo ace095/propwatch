@@ -8,6 +8,8 @@ import logging
 import os
 import re
 
+import unknowns
+
 log = logging.getLogger("webaudit.browser")
 
 BROWSER_CHANNELS = ("msedge", "chrome")
@@ -129,13 +131,48 @@ def _launch(playwright):
     raise RuntimeError(f"no usable Edge or Chrome found ({last_error})")
 
 
+def looks_js_rendered(html: str) -> bool:
+    """True for a near-empty page whose content is probably built by scripts."""
+    if not html or "<script" not in html.lower():
+        return False
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    return len(soup.get_text(" ", strip=True)) < 150
+
+
+def render_page(url: str):
+    """Load url in a real browser. Returns (status, lower-case headers, html), or None on failure."""
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = _launch(p)
+            try:
+                page = browser.new_page(viewport={"width": 1280, "height": 800})
+                response = page.goto(url, wait_until="load", timeout=PAGE_TIMEOUT_MS)
+                try:
+                    page.wait_for_load_state("networkidle", timeout=5_000)
+                except Exception:
+                    pass  # some sites never go idle; what loaded so far is enough
+                headers = {k.lower(): v for k, v in response.all_headers().items()}
+                log.info("rendered %s in a real browser (%d characters)", url, len(page.content()))
+                return response.status, headers, page.content()
+            finally:
+                browser.close()
+    except Exception as e:
+        log.warning("browser render of %s failed: %s", url, e)
+        return None
+
+
 def run_browser_audit(url: str) -> dict:
     """Load url in a real browser; return axe-core and keyboard findings."""
     try:
         from playwright.sync_api import sync_playwright
         axe_js = _axe_source()
     except ImportError:
-        return {"_unavailable": "Install playwright and axe-playwright-python for the browser audit."}
+        return unknowns.unavailable("Install playwright and axe-playwright-python for the browser audit.",
+                                    "missing_tool")
     try:
         with sync_playwright() as p:
             browser = _launch(p)
@@ -157,4 +194,5 @@ def run_browser_audit(url: str) -> dict:
                 browser.close()
     except Exception as e:
         log.warning("browser audit failed: %s", e)
-        return {"_unavailable": f"Browser audit could not run: {str(e).splitlines()[0][:200]}"}
+        message = str(e).splitlines()[0][:200]
+        return unknowns.unavailable(f"Browser audit could not run: {message}", unknowns.classify(str(e)))

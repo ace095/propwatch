@@ -74,6 +74,12 @@
     <form id="form" class="row" autocomplete="off">
       <input type="text" id="domain" list="targets" placeholder="example.com" aria-label="Domain to scan" required>
       <datalist id="targets"></datalist>
+      <select id="pages" aria-label="How many pages to check" style="padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)">
+        <option value="0">Homepage only</option>
+        <option value="5" selected>Homepage + 5 pages</option>
+        <option value="25">Homepage + 25 pages</option>
+        <option value="50">Up to 50 pages (slower)</option>
+      </select>
       <button type="submit" id="scan">Run scan</button>
     </form>
     <p class="hint" id="targetsHint"></p>
@@ -152,7 +158,7 @@ $("form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   clearInterval(timer);
   $("results").hidden = true; $("reportBox").hidden = true; banner();
-  const { ok, body } = await api("/api/scan", { method: "POST", body: JSON.stringify({ domain: $("domain").value }) });
+  const { ok, body } = await api("/api/scan", { method: "POST", body: JSON.stringify({ domain: $("domain").value, pages: Number($("pages").value) }) });
   if (!ok) { banner("bad", body.refused ? "Refused: " + body.error : body.error); $("chips").replaceChildren(); return; }
   jobId = body.id;
   $("console").hidden = false; $("scan").disabled = true;
@@ -229,6 +235,14 @@ $("monForm").addEventListener("submit", async (ev) => {
 
 // ---- turning findings into plain statuses ----
 const S = { good: "Good", warn: "Needs attention", bad: "Problem", unk: "Unknown" };
+// A "could not check" result, with the reason and what the client can do about it.
+function unknown(title, section) {
+  const lines = [section._unavailable];
+  if (section.why) lines.push("Why: " + section.why);
+  if (section.client_action) lines.push("What to do: " + section.client_action);
+  return [title, "unk", lines];
+}
+
 function assess(r) {
   const out = [];
   const t = r.tls || {};
@@ -241,38 +255,38 @@ function assess(r) {
   } else out.push(["Encryption (TLS)", "unk", [t.error || "Could not check"]]);
 
   const h = r.headers || {};
-  if (h._unavailable) out.push(["Security headers", "unk", [h._unavailable]]);
+  if (h._unavailable) out.push(unknown("Security headers", h));
   else {
     const have = Object.keys(h.present || {}).length, miss = Object.keys(h.missing || {});
     out.push(["Security headers", miss.length === 0 ? "good" : have ? "warn" : "bad",
       [have + " of " + (have + miss.length) + " present"].concat(miss.map((m) => "Missing: " + m))]);
   }
   const rd = r.http_redirect || {};
-  if (rd._unavailable) out.push(["HTTP to HTTPS redirect", "unk", [rd._unavailable]]);
+  if (rd._unavailable) out.push(unknown("HTTP to HTTPS redirect", rd));
   else out.push(["HTTP to HTTPS redirect", rd.redirects_to_https ? "good" : "bad",
     [rd.redirects_to_https ? "Plain http:// sends visitors to " + rd.location : "http:// loads without redirecting (status " + rd.http_status + ")"]]);
 
   const e = r.email_auth || {};
-  if (e._unavailable) out.push(["Email spoofing protection", "unk", [e._unavailable]]);
+  if (e._unavailable) out.push(unknown("Email spoofing protection", e));
   else {
     const lines = ["SPF: " + (e.spf || "not found"), "DMARC: " + (e.dmarc || (e.dmarc_unavailable || "not found"))];
     out.push(["Email spoofing protection", e.spf && e.dmarc ? "good" : (e.spf || e.dmarc) ? "warn" : "bad", lines]);
   }
   const p = r.privacy || {};
-  if (p._unavailable) out.push(["Privacy signals", "unk", [p._unavailable]]);
+  if (p._unavailable) out.push(unknown("Privacy signals", p));
   else out.push(["Privacy signals", (p.policy_pages_found || []).length ? "good" : "warn", [
     (p.policy_pages_found || []).length ? "Policy pages: " + p.policy_pages_found.join(", ") : "No privacy policy page found",
     p.mentions_cookies ? "Mentions cookies" + (p.cookie_banner_hint ? " (banner detected)" : " (no banner detected)") : "No cookie mentions",
     p.has_analytics ? "Analytics detected" : "No analytics detected"]]);
 
   const a = r.accessibility || {};
-  if (a._unavailable) out.push(["Accessibility (basic WCAG)", "unk", [a._unavailable]]);
+  if (a._unavailable) out.push(unknown("Accessibility (basic WCAG)", a));
   else out.push(["Accessibility (basic WCAG)", a.issue_count ? "warn" : "good",
     (a.issues || []).map((i) => i.rule + " [WCAG " + i.wcag + "]: " + i.count).concat(a.issue_count ? [] : ["No issues found by the static checks"])]);
 
   const b = r.accessibility_browser;
   if (b) {
-    if (b._unavailable) out.push(["Accessibility (real browser, axe-core)", "unk", [b._unavailable]]);
+    if (b._unavailable) out.push(unknown("Accessibility (real browser, axe-core)", b));
     else {
       const k = b.keyboard || {}, imp = b.by_impact || {};
       const lines = b.violations.map((v) => v.impact + ": " + v.help + " [WCAG " + (v.wcag.join(", ") || "n/a") + "] x" + v.count);

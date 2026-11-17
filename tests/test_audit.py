@@ -450,6 +450,112 @@ class TlsRetry(unittest.TestCase):
         self.assertEqual(once.call_count, 2)
 
 
+class UnknownsExplained(unittest.TestCase):
+    def test_classify_known_failures(self):
+        import unknowns
+        cases = {
+            "<urlopen error [Errno 11001] getaddrinfo failed>": "dns",
+            "net::ERR_NAME_NOT_RESOLVED at https://x.test/": "dns",
+            "<urlopen error timed out>": "timeout",
+            "Timeout 25000ms exceeded": "timeout",
+            "[SSL: CERTIFICATE_VERIFY_FAILED] certificate has expired": "tls",
+            "net::ERR_CERT_COMMON_NAME_INVALID": "tls",
+            "Remote end closed connection without response": "connection",
+            "[WinError 10061] No connection could be made": "connection",
+            "no usable Edge or Chrome found": "missing_tool",
+            "something odd": "unknown_error",
+        }
+        for text, reason in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(unknowns.classify(text), reason)
+
+    def test_status_beats_text(self):
+        import unknowns
+        for status in (401, 403, 429):
+            self.assertEqual(unknowns.classify("whatever", status), "blocked")
+        self.assertEqual(unknowns.classify("", 503), "server_error")
+
+    def test_every_reason_has_a_why_and_an_action(self):
+        import unknowns
+        for reason in unknowns.REASONS:
+            r = unknowns.unavailable("m", reason)
+            self.assertTrue(r["why"] and r["client_action"], reason)
+            self.assertEqual((r["_unavailable"], r["reason"]), ("m", reason))
+
+    def test_collectors_explain_why_they_could_not_check(self):
+        err = (None, {"_error": "<urlopen error timed out>"}, "")
+        with mock.patch.object(audit, "_get", return_value=err):
+            for name in ("check_headers", "check_http_redirect", "check_privacy", "check_accessibility"):
+                with self.subTest(check=name):
+                    r = getattr(audit, name)("x.test")
+                    self.assertEqual(r["reason"], "timeout")
+                    self.assertIn("re-run", r["client_action"].lower())
+
+    def test_dns_failure_for_email_is_explained(self):
+        with mock.patch.object(audit, "_txt_records", return_value=None):
+            self.assertEqual(audit.check_email_auth("x.test")["reason"], "dns")
+
+    def test_a_refusal_is_reported_as_blocked_not_as_missing_headers(self):
+        for status in (403, 429):
+            with self.subTest(status=status), \
+                 mock.patch.object(audit, "_get", return_value=(status, {"server": "waf"}, "denied")):
+                home = audit._fetch_home("x.test")
+                r = audit.check_headers("x.test", home)
+                self.assertNotIn("missing", r)
+                self.assertEqual(r["reason"], "blocked")
+                self.assertEqual(audit.check_privacy("x.test", home)["reason"], "blocked")
+                self.assertEqual(audit.check_accessibility("x.test", home)["reason"], "blocked")
+
+
+class BrowserFallback(unittest.TestCase):
+    EMPTY_SHELL = '<html><body><div id="root"></div><script src="/app.js"></script></body></html>'
+    REAL_TEXT = "<html><body><p>" + "A real paragraph of content. " * 20 + "</p><script src='/a.js'></script></body></html>"
+
+    def test_detects_script_built_pages(self):
+        import browser_audit
+        self.assertTrue(browser_audit.looks_js_rendered(self.EMPTY_SHELL))
+        self.assertFalse(browser_audit.looks_js_rendered(self.REAL_TEXT))
+        self.assertFalse(browser_audit.looks_js_rendered("<html><title>t</title></html>"))  # tiny but no scripts
+        self.assertFalse(browser_audit.looks_js_rendered(""))
+
+    def test_empty_shell_is_re_read_in_the_browser(self):
+        import browser_audit
+        rendered = (200, {"strict-transport-security": "max-age=1"}, "<html>" + "real " * 80 + "</html>")
+        with mock.patch.object(audit, "_get", return_value=(200, {}, self.EMPTY_SHELL)), \
+             mock.patch.object(browser_audit, "render_page", return_value=rendered) as render:
+            status, headers, body = audit._fetch_home("x.test")
+        render.assert_called_once_with("https://x.test/")
+        self.assertIn("real", body)
+        self.assertEqual(headers["_rendered"], "browser")
+
+    def test_normal_page_is_not_sent_to_the_browser(self):
+        import browser_audit
+        with mock.patch.object(audit, "_get", return_value=(200, {}, self.REAL_TEXT)), \
+             mock.patch.object(browser_audit, "render_page") as render:
+            audit._fetch_home("x.test")
+        render.assert_not_called()
+
+    def test_browser_can_be_switched_off(self):
+        import browser_audit
+        with mock.patch.object(audit, "_get", return_value=(200, {}, self.EMPTY_SHELL)), \
+             mock.patch.object(browser_audit, "render_page") as render:
+            self.assertEqual(audit._fetch_home("x.test", render=False)[2], self.EMPTY_SHELL)
+        render.assert_not_called()
+
+    def test_failed_render_keeps_the_original_page(self):
+        import browser_audit
+        with mock.patch.object(audit, "_get", return_value=(200, {"a": "b"}, self.EMPTY_SHELL)), \
+             mock.patch.object(browser_audit, "render_page", return_value=None):
+            self.assertEqual(audit._fetch_home("x.test"), (200, {"a": "b"}, self.EMPTY_SHELL))
+
+    def test_a_refusal_is_never_retried_in_the_browser(self):
+        import browser_audit
+        with mock.patch.object(audit, "_get", return_value=(403, {}, self.EMPTY_SHELL)), \
+             mock.patch.object(browser_audit, "render_page") as render:
+            self.assertIsNone(audit._fetch_home("x.test")[0])
+        render.assert_not_called()
+
+
 class Logging(unittest.TestCase):
     def test_failed_fetch_is_logged(self):
         with self.assertLogs("webaudit", level="WARNING") as cm:

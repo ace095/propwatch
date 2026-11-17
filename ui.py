@@ -20,6 +20,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import audit
+import crawler
 import scheduler
 from contextlib import closing
 
@@ -70,11 +71,12 @@ def _save(result: dict) -> str:
     return path
 
 
-def _scan_worker(job: dict) -> None:
+def _scan_worker(job: dict, pages: int = 5) -> None:
     _current.job = job
     try:
         job["result"] = audit.run_audit(
-            job["domain"], on_step=lambda name, state: job["steps"].update({name: state}))
+            job["domain"], pages=pages,
+            on_step=lambda name, state: job["steps"].update({name: state}))
         job["saved_to"] = _save(job["result"])
         log.info("Saved %s", job["saved_to"])
         with closing(scheduler.connect()) as conn:
@@ -106,14 +108,20 @@ def targets() -> dict:
             "file": os.environ.get("WEBAUDIT_ALLOWLIST") or audit.DEFAULT_ALLOWLIST}
 
 
-def start_scan(domain: str) -> dict:
+def start_scan(domain: str, pages=5) -> dict:
     """Validate, check authorization, then scan in the background."""
     host = audit._norm(domain or "")
     if not re.fullmatch(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?", host) or "." not in host:
         raise ValueError("Enter a domain like example.com")
+    try:
+        pages = int(5 if pages is None else pages)
+    except (TypeError, ValueError):
+        raise ValueError("pages must be a number")
+    if not 0 <= pages <= crawler.MAX_PAGE_LIMIT:
+        raise ValueError(f"pages must be between 0 and {crawler.MAX_PAGE_LIMIT}")
     audit.require_authorized(host)  # raises TargetNotAuthorized before any request
     job = _new_job(host)
-    threading.Thread(target=_scan_worker, args=(job,), daemon=True).start()
+    threading.Thread(target=_scan_worker, args=(job, pages), daemon=True).start()
     return job
 
 
@@ -214,7 +222,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "invalid JSON"})
         if self.path == "/api/scan":
             try:
-                return self._json(200, public(start_scan(data.get("domain"))))
+                return self._json(200, public(start_scan(data.get("domain"), data.get("pages"))))
             except audit.TargetNotAuthorized as e:
                 return self._json(403, {"error": str(e), "refused": True})
             except ValueError as e:

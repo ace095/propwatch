@@ -9,10 +9,12 @@ from urllib.parse import urljoin, urldefrag, urlparse
 from xml.etree import ElementTree
 
 import audit
+import unknowns
 
 log = logging.getLogger("webaudit.crawl")
 
 DEFAULT_PAGE_LIMIT = 5
+MAX_PAGE_LIMIT = 200  # hard ceiling, however large a limit is asked for
 MAX_BROWSER_PAGES = 3  # axe runs are slow, so only the first few pages get one
 SKIP_EXTENSIONS = (".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".zip", ".mp4",
                    ".mp3", ".css", ".js", ".ico", ".xml", ".json", ".doc", ".docx", ".xls", ".xlsx")
@@ -83,20 +85,21 @@ def _priority(url: str) -> int:
     return len(PRIORITY_WORDS)
 
 
+def _page_links(html: str, base: str) -> list:
+    from bs4 import BeautifulSoup
+    return [_clean(base, a["href"]) for a in BeautifulSoup(html or "", "html.parser").find_all("a", href=True)]
+
+
 def discover_pages(host: str, home_html: str, limit: int = DEFAULT_PAGE_LIMIT) -> dict:
     """Pick up to `limit` same-site pages from homepage links and the sitemap."""
     if limit <= 0:
-        return {"urls": [], "discovered": 0, "blocked_by_robots": 0}
-    from bs4 import BeautifulSoup
+        return {"urls": [], "discovered": 0, "blocked_by_robots": 0, "disallows": []}
     base = f"https://{host}/"
     status, _, robots_body = audit._get(f"https://{host}/robots.txt")
     disallows = parse_robots(robots_body) if status == 200 else []
 
-    candidates = []
-    soup = BeautifulSoup(home_html or "", "html.parser")
-    for a in soup.find_all("a", href=True):
-        candidates.append(_clean(base, a["href"]))
-    for loc in _sitemap_urls(host)[:200]:
+    candidates = _page_links(home_html, base)
+    for loc in _sitemap_urls(host)[:MAX_PAGE_LIMIT]:
         candidates.append(_clean(base, loc))
 
     seen, usable, blocked = {base.rstrip("/"), base}, [], 0
@@ -111,7 +114,8 @@ def discover_pages(host: str, home_html: str, limit: int = DEFAULT_PAGE_LIMIT) -
     usable.sort(key=_priority)  # stable: keeps page order within a priority
     log.info("crawl: %d candidate pages, %d blocked by robots.txt, scanning %d",
              len(usable), blocked, min(limit, len(usable)))
-    return {"urls": usable[:limit], "discovered": len(usable), "blocked_by_robots": blocked}
+    return {"urls": usable[:limit], "discovered": len(usable), "blocked_by_robots": blocked,
+            "disallows": disallows}
 
 
 def policy_links(home_html: str, host: str) -> list:
@@ -146,17 +150,38 @@ def analyze_page(url: str, html: str, status: int) -> dict:
     }
 
 
-def scan_pages(host: str, home_html: str, limit: int = DEFAULT_PAGE_LIMIT, browser: bool = True) -> dict:
-    """Discover and check extra pages. Returns {"crawl": {...}, "pages": [...]}."""
+def scan_pages(host: str, home_html: str, limit: int = DEFAULT_PAGE_LIMIT, browser: bool = True,
+               axe_pages: int = MAX_BROWSER_PAGES) -> dict:
+    """Discover and check extra pages. Returns {"crawl": {...}, "pages": [...]}.
+
+    Starts from homepage links and the sitemap. If that is fewer pages than `limit`,
+    keeps following links found on the pages it visits (breadth first) until the limit.
+    """
+    limit = max(0, min(limit, MAX_PAGE_LIMIT))
     plan = discover_pages(host, home_html, limit)  # host was authorized by run_audit
-    pages = []
-    for n, url in enumerate(plan["urls"]):
-        status, _, html = audit._get(url)
+    base = f"https://{host}/"
+    disallows = plan.get("disallows", [])
+    queue = list(plan["urls"])
+    seen = set(queue) | {base, base.rstrip("/")}
+    discovered, pages = plan["discovered"], []
+    while queue and len(pages) < limit:
+        url = queue.pop(0)
+        n = len(pages)
+        status, headers, html = audit._get(url)
         if status is None:
-            pages.append({"url": url, "status": None, "error": "could not fetch"})
+            pages.append({"url": url, "status": None, "error": "could not fetch",
+                          "reason": unknowns.classify(headers.get("_error", ""))})
             continue
+        if html and len(pages) + len(queue) < limit:
+            for link in _page_links(html, url):
+                if (link and link not in seen and _same_site(link, host)
+                        and allowed_by_robots(urlparse(link).path or "/", disallows)):
+                    seen.add(link)
+                    queue.append(link)
+                    discovered += 1
+            queue.sort(key=_priority)
         page = analyze_page(url, html, status)
-        if browser and n < MAX_BROWSER_PAGES and status == 200:
+        if browser and n < axe_pages and status == 200:
             import browser_audit
             axe = browser_audit.run_browser_audit(url)
             page["axe"] = ({"unavailable": axe["_unavailable"]} if "_unavailable" in axe else
@@ -165,6 +190,6 @@ def scan_pages(host: str, home_html: str, limit: int = DEFAULT_PAGE_LIMIT, brows
                                             "wcag": v["wcag"], "count": v["count"]} for v in axe["violations"]],
                             "keyboard_trap": axe["keyboard"]["possible_keyboard_trap"]})
         pages.append(page)
-    return {"crawl": {"discovered": plan["discovered"], "scanned": len(pages),
+    return {"crawl": {"discovered": discovered, "scanned": len(pages),
                       "blocked_by_robots": plan["blocked_by_robots"], "limit": limit},
             "pages": pages}

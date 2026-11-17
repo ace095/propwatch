@@ -16,7 +16,7 @@ import ui
 RESULT = {"target": "x.test", "scan_type": "passive", "tls": {"reachable": True}}
 
 
-def fake_run_audit(domain, allowlist_path=None, on_step=None):
+def fake_run_audit(domain, allowlist_path=None, on_step=None, **kwargs):
     for step in audit.AUDIT_STEPS:
         on_step(step, "running")
         on_step(step, "done")
@@ -177,6 +177,19 @@ class UiServer(unittest.TestCase):
     def test_monitor_interval_is_clamped(self):
         _, body = self.json("/api/monitor", {"domain": "x.test", "every_hours": 999999})
         self.assertEqual(body["monitored"][0]["every_hours"], 24 * 90)
+
+    def test_page_count_is_passed_to_the_scanner(self):
+        with mock.patch.object(audit, "run_audit", side_effect=fake_run_audit) as run:
+            _, job = self.json("/api/scan", {"domain": "x.test", "pages": 25})
+            self.wait_for(job["id"])
+            _, job = self.json("/api/scan", {"domain": "x.test"})
+            self.wait_for(job["id"])
+        self.assertEqual([c.kwargs["pages"] for c in run.call_args_list], [25, 5])
+
+    def test_bad_page_counts_are_rejected(self):
+        for bad in (-1, 201, "lots"):
+            with self.subTest(pages=bad):
+                self.assertEqual(self.json("/api/scan", {"domain": "x.test", "pages": bad})[0], 400)
 
     def test_scan_error_is_surfaced(self):
         with mock.patch.object(audit, "run_audit", side_effect=RuntimeError("boom")):
