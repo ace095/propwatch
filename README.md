@@ -12,6 +12,11 @@ passive scan, hand over the findings, close the paid engagement.
 - Privacy signals: policy pages, cookie mentions, analytics, cookie-banner hint
 - Accessibility signals: `lang` attr, page title, images missing alt text
 
+- Real-browser accessibility audit: axe-core (WCAG 2.1 A/AA, including colour contrast)
+  plus a keyboard Tab test (reachability, visible focus, keyboard traps). Uses the Edge or
+  Chrome already installed; add `--no-browser` to skip it. If no browser is found the
+  report says it was not run, never that the page passed.
+
 ## What it deliberately does NOT do
 No login testing, no vuln probing, no port scans, no payloads. Passive only.
 Running active tests on a site you don't own/weren't authorized to test can be
@@ -66,7 +71,7 @@ python pdf_export.py report.md report.pdf    # convert an existing markdown repo
 4. Deep scan + remediation (the paid part)
 
 ## Roadmap (next steps)
-- Add axe-core/Pa11y (Node) for a real WCAG 2.1 AA audit
+- (done) Real-browser WCAG audit with axe-core
 - Split the single report prompt into Accessibility / Privacy / Security agents
 - Add a job queue + Postgres so you can scan many domains on a schedule
 - (done) Allowlist of authorized targets and per-host rate limiting

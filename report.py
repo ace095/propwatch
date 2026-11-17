@@ -46,13 +46,18 @@ AGENTS = {
         ),
     },
     "accessibility": {
-        "keys": ["accessibility"],
+        "keys": ["accessibility", "accessibility_browser"],
         "rules": (
-            "You assess accessibility from PASSIVE signals only (a full audit needs "
-            "axe-core/Pa11y).\n"
-            "Weigh: images missing alt text (Medium); missing html lang attribute "
-            "(Low-Medium); no page title (Low-Medium).\n"
-            "Standard: ADA / WCAG 2.1 AA. Flag that a full audit is still needed."
+            "You assess accessibility from two PASSIVE sources: static HTML checks "
+            "('accessibility') and an axe-core run in a real browser "
+            "('accessibility_browser', including a keyboard Tab test).\n"
+            "Weigh by axe impact: critical/serious (High), moderate (Medium), minor "
+            "(Low). Colour contrast failures are WCAG 1.4.3; keyboard traps or "
+            "elements with no visible focus are WCAG 2.1.2 / 2.4.7. Cite the WCAG "
+            "criterion for each finding. If 'accessibility_browser' is unavailable, "
+            "say the browser audit did not run.\n"
+            "Standard: ADA / WCAG 2.1 AA. Automated tools find only part of the "
+            "issues, so note that manual review ('needs_manual_review') is still advised."
         ),
     },
 }

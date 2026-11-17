@@ -129,7 +129,17 @@ CERT_PROBLEMS = {
 }
 
 
-def check_tls(host: str) -> dict:
+def check_tls(host: str, retries: int = 1) -> dict:
+    """TLS handshake check; one retry on timeouts and dropped connections."""
+    for attempt in range(retries + 1):
+        out = _tls_once(host)
+        if "cert_problem" in out or out["reachable"] or attempt == retries:
+            return out
+        log.info("%s: TLS check failed (%s); retrying", host, out.get("error"))
+    return out
+
+
+def _tls_once(host: str) -> dict:
     out = {"reachable": False}
     ctx = _ssl_context()
     try:
@@ -427,11 +437,18 @@ def require_authorized(host: str, allowlist_path: str = None) -> None:
 # ---------- orchestrator ----------
 
 AUDIT_STEPS = ["robots", "homepage", "tls", "headers", "http_redirect",
-               "email_auth", "privacy", "accessibility"]
+               "email_auth", "privacy", "accessibility", "browser_a11y"]
 
 
-def run_audit(domain: str, allowlist_path: str = None, on_step=None) -> dict:
-    """Run every passive check. on_step(name, "running" | "done") reports progress."""
+def check_browser_accessibility(host: str) -> dict:
+    """axe-core + keyboard test in a real browser (see browser_audit.py)."""
+    import browser_audit
+    return browser_audit.run_browser_audit(f"https://{host}/")
+
+
+def run_audit(domain: str, allowlist_path: str = None, on_step=None,
+              browser: bool = True) -> dict:
+    """Run every passive check. on_step(name, "running" | "done" | "skipped") reports progress."""
     host = _norm(domain)
     require_authorized(host, allowlist_path)
     log.info("Auditing %s (passive)", host)
@@ -446,7 +463,7 @@ def run_audit(domain: str, allowlist_path: str = None, on_step=None) -> dict:
 
     robots = step("robots", check_robots, host)
     home = step("homepage", _fetch_home, host)
-    return {
+    result = {
         "target": host,
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": "passive",
@@ -458,6 +475,11 @@ def run_audit(domain: str, allowlist_path: str = None, on_step=None) -> dict:
         "privacy": step("privacy", check_privacy, host, home),
         "accessibility": step("accessibility", check_accessibility, host, home),
     }
+    if browser:
+        result["accessibility_browser"] = step("browser_a11y", check_browser_accessibility, host)
+    elif on_step:
+        on_step("browser_a11y", "skipped")
+    return result
 
 
 def main():
@@ -465,6 +487,8 @@ def main():
     ap.add_argument("domain", help="e.g. example.edu")
     ap.add_argument("--json", metavar="FILE", help="write raw findings to a JSON file")
     ap.add_argument("-v", "--verbose", action="store_true", help="log every request")
+    ap.add_argument("--no-browser", action="store_true",
+                    help="skip the real-browser accessibility audit (faster)")
     ap.add_argument("--allowlist", metavar="FILE",
                     help="authorized targets file (default: authorized_targets.txt)")
     args = ap.parse_args()
@@ -472,7 +496,7 @@ def main():
                         format="%(levelname)s %(message)s", stream=sys.stderr)
 
     try:
-        data = run_audit(args.domain, args.allowlist)
+        data = run_audit(args.domain, args.allowlist, browser=not args.no_browser)
     except TargetNotAuthorized as e:
         log.error("%s", e)
         sys.exit(2)

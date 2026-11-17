@@ -105,7 +105,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const STEP_LABELS = { robots: "robots.txt", homepage: "Homepage", tls: "Encryption (TLS)", headers: "Security headers",
-  http_redirect: "HTTP to HTTPS", email_auth: "Email spoofing", privacy: "Privacy", accessibility: "Accessibility" };
+  http_redirect: "HTTP to HTTPS", email_auth: "Email spoofing", privacy: "Privacy", accessibility: "Accessibility (HTML)", browser_a11y: "Browser audit (axe)" };
 let jobId = null, timer = null;
 
 function el(tag, cls, text) {
@@ -209,6 +209,21 @@ function assess(r) {
   else out.push(["Accessibility (basic WCAG)", a.issue_count ? "warn" : "good",
     (a.issues || []).map((i) => i.rule + " [WCAG " + i.wcag + "]: " + i.count).concat(a.issue_count ? [] : ["No issues found by the static checks"])]);
 
+  const b = r.accessibility_browser;
+  if (b) {
+    if (b._unavailable) out.push(["Accessibility (real browser, axe-core)", "unk", [b._unavailable]]);
+    else {
+      const k = b.keyboard || {}, imp = b.by_impact || {};
+      const lines = b.violations.map((v) => v.impact + ": " + v.help + " [WCAG " + (v.wcag.join(", ") || "n/a") + "] x" + v.count);
+      if (!b.violations.length) lines.push("axe-core found no WCAG 2.1 A/AA failures (" + b.rules_passed + " rules passed)");
+      lines.push("Keyboard: reached " + k.reached_by_tab + " of " + k.focusable_elements + " focusable elements");
+      (k.no_visible_focus_style || []).forEach((n) => lines.push("No visible focus style: " + n));
+      if (k.possible_keyboard_trap) lines.push("Possible keyboard trap at " + k.possible_keyboard_trap);
+      if (b.needs_manual_review) lines.push(b.needs_manual_review + " checks need manual review");
+      const bad = (imp.critical || 0) + (imp.serious || 0) > 0 || k.possible_keyboard_trap;
+      out.push(["Accessibility (real browser, axe-core)", bad ? "bad" : (b.violation_rules || (k.no_visible_focus_style || []).length) ? "warn" : "good", lines]);
+    }
+  }
   const ro = r.robots || {};
   out.push(["robots.txt", "unk", [ro.found ? (ro.disallow_rules || []).length + " disallow rules listed" : "No robots.txt found"]]);
   return out;

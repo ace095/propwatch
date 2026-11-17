@@ -10,3 +10,7 @@ anthropic           # Claude API client
 # For PDF export:
 fpdf2               # writes the PDF
 markdown            # report markdown -> HTML
+
+# For the real-browser accessibility audit (uses installed Edge or Chrome):
+playwright          # drives the browser
+axe-playwright-python  # bundles axe-core

@@ -128,6 +128,7 @@ class HomepageFetchedOnce(unittest.TestCase):
         with mock.patch.object(audit, "_get", side_effect=fake_get), \
              mock.patch.object(audit, "load_allowlist", return_value=["x.test"]), \
              mock.patch.object(audit, "check_tls", return_value={}), \
+             mock.patch.object(audit, "check_browser_accessibility", return_value={}), \
              mock.patch.object(audit, "check_email_auth", return_value={}):
             audit.run_audit("x.test")
         self.assertEqual(calls.count("https://x.test/"), 1)
@@ -366,6 +367,87 @@ class AccessibilityChecks(unittest.TestCase):
         self.assertNotIn("Links without an accessible name", self.rules(r))
         self.assertNotIn("Buttons without an accessible name", self.rules(r))
         self.assertNotIn("Form fields without a label", self.rules(r))
+
+
+AXE_SAMPLE = {
+    "testEngine": {"version": "4.x"},
+    "passes": [{}, {}, {}],
+    "incomplete": [{}],
+    "violations": [
+        {"id": "image-alt", "impact": "critical", "help": "Images need alt text",
+         "tags": ["cat.text-alternatives", "wcag2a", "wcag111"], "helpUrl": "https://dequeuniversity.com/x",
+         "nodes": [{"target": ["img"], "html": "<img src=a>"}, {"target": ["#b", "img"], "html": "<img src=b>"}]},
+        {"id": "color-contrast", "impact": "serious", "help": "Contrast too low",
+         "tags": ["wcag2aa", "wcag143"], "nodes": [{"target": ["p"], "html": "<p>x</p>"}]},
+        {"id": "x", "impact": None, "help": "no impact given",
+         "tags": ["wcag21aa", "wcag1410"], "nodes": [{"target": ["a"], "html": "<a>" + "y" * 400}]},
+    ],
+}
+
+
+class BrowserAudit(unittest.TestCase):
+    def test_wcag_criteria_from_axe_tags(self):
+        import browser_audit
+        self.assertEqual(browser_audit._wcag_criteria(["wcag2aa", "wcag143", "wcag1410", "best-practice"]),
+                         ["1.4.3", "1.4.10"])
+
+    def test_summary_orders_by_impact_and_counts_elements(self):
+        import browser_audit
+        s = browser_audit.summarize_axe(AXE_SAMPLE)
+        self.assertEqual([v["id"] for v in s["violations"]], ["image-alt", "color-contrast", "x"])
+        self.assertEqual(s["by_impact"], {"critical": 2, "serious": 1, "moderate": 0, "minor": 1})
+        self.assertEqual((s["violation_rules"], s["violation_elements"]), (3, 4))
+        self.assertEqual((s["rules_passed"], s["needs_manual_review"]), (3, 1))
+        self.assertEqual(s["violations"][0]["wcag"], ["1.1.1"])
+        self.assertEqual(s["violations"][0]["examples"][1]["target"], "#b img")
+        self.assertLessEqual(len(s["violations"][2]["examples"][0]["html"]), 160)
+
+    def test_no_browser_means_unavailable_not_a_clean_pass(self):
+        import browser_audit
+        with mock.patch.object(browser_audit, "_launch", side_effect=RuntimeError("no browser")):
+            r = browser_audit.run_browser_audit("https://x.test/")
+        self.assertIn("_unavailable", r)
+        self.assertNotIn("violations", r)
+
+    def test_browser_step_can_be_skipped(self):
+        steps = []
+        with mock.patch.object(audit, "load_allowlist", return_value=["x.test"]), \
+             mock.patch.object(audit, "_get", return_value=(404, {}, "")), \
+             mock.patch.object(audit, "check_tls", return_value={}), \
+             mock.patch.object(audit, "check_email_auth", return_value={}), \
+             mock.patch.object(audit, "check_browser_accessibility") as browser:
+            result = audit.run_audit("x.test", browser=False, on_step=lambda n, s: steps.append((n, s)))
+        browser.assert_not_called()
+        self.assertNotIn("accessibility_browser", result)
+        self.assertIn(("browser_a11y", "skipped"), steps)
+
+    def test_browser_result_is_included_by_default(self):
+        with mock.patch.object(audit, "load_allowlist", return_value=["x.test"]), \
+             mock.patch.object(audit, "_get", return_value=(404, {}, "")), \
+             mock.patch.object(audit, "check_tls", return_value={}), \
+             mock.patch.object(audit, "check_email_auth", return_value={}), \
+             mock.patch.object(audit, "check_browser_accessibility", return_value={"violations": []}):
+            result = audit.run_audit("x.test")
+        self.assertEqual(result["accessibility_browser"], {"violations": []})
+
+
+class TlsRetry(unittest.TestCase):
+    def test_retries_transient_failure_then_succeeds(self):
+        results = [{"reachable": False, "error": "timed out"}, {"reachable": True}]
+        with mock.patch.object(audit, "_tls_once", side_effect=results) as once:
+            self.assertTrue(audit.check_tls("x.test")["reachable"])
+        self.assertEqual(once.call_count, 2)
+
+    def test_certificate_problem_is_final_and_not_retried(self):
+        bad = {"reachable": False, "cert_problem": "expired"}
+        with mock.patch.object(audit, "_tls_once", return_value=bad) as once:
+            self.assertEqual(audit.check_tls("x.test")["cert_problem"], "expired")
+        self.assertEqual(once.call_count, 1)
+
+    def test_gives_up_after_the_retry(self):
+        with mock.patch.object(audit, "_tls_once", return_value={"reachable": False, "error": "x"}) as once:
+            self.assertFalse(audit.check_tls("x.test")["reachable"])
+        self.assertEqual(once.call_count, 2)
 
 
 class Logging(unittest.TestCase):

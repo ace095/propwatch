@@ -75,6 +75,14 @@ class ExampleCom(unittest.TestCase):
     def test_http_does_not_redirect(self):
         self.assertFalse(self.r["http_redirect"]["redirects_to_https"])
 
+    def test_browser_audit_finds_no_wcag_failures(self):
+        b = self.r["accessibility_browser"]
+        if "_unavailable" in b:
+            self.skipTest(b["_unavailable"])
+        self.assertEqual(b["violations"], [])
+        self.assertGreater(b["rules_passed"], 0)
+        self.assertEqual(b["keyboard"]["reached_by_tab"], b["keyboard"]["focusable_elements"])
+
     def test_mail_policy(self):
         self.assertEqual(self.r["email_auth"]["spf"], "v=spf1 -all")
         self.assertIn("p=reject", self.r["email_auth"]["dmarc"])
@@ -94,6 +102,15 @@ class OwaspOrg(unittest.TestCase):
         redirect = self.r["http_redirect"]
         self.assertTrue(redirect["redirects_to_https"])
         self.assertIn(redirect["http_status"], (301, 302, 307, 308))
+
+    def test_browser_audit_runs_axe_and_keyboard_test(self):
+        b = self.r["accessibility_browser"]
+        if "_unavailable" in b:
+            self.skipTest(b["_unavailable"])
+        self.assertIn("axe-core", b["engine"])
+        self.assertGreater(b["rules_passed"], 5)
+        self.assertGreater(b["keyboard"]["reached_by_tab"], 0)
+        self.assertIsNone(b["keyboard"]["possible_keyboard_trap"])
 
     def test_homepage_is_parsed(self):
         self.assertTrue(self.r["accessibility"]["has_lang_attribute"])
