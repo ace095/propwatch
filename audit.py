@@ -20,6 +20,7 @@ The script degrades gracefully and tells you what it couldn't check.
 """
 
 import os
+import re
 import sys
 import ssl
 import json
@@ -277,6 +278,99 @@ def check_privacy(host: str, home=None) -> dict:
 
 # ---------- collector: lightweight accessibility signals ----------
 
+NO_LABEL_INPUT_TYPES = {"hidden", "submit", "button", "reset", "image"}
+
+
+def _text(tag) -> str:
+    return " ".join(tag.get_text(" ", strip=True).split())
+
+
+def _has_name(tag, soup) -> bool:
+    """Does a form control / link / button have an accessible name?"""
+    if any(tag.get(a, "").strip() for a in ("aria-label", "aria-labelledby", "title")):
+        return True
+    if _text(tag) or tag.find("img", alt=lambda v: v and v.strip()):
+        return True
+    if tag.name in ("input", "select", "textarea"):
+        if tag.get("id") and soup.find("label", attrs={"for": tag["id"]}):
+            return True
+        if tag.find_parent("label"):
+            return True
+    if tag.name == "input" and tag.get("type") in ("submit", "button", "reset") \
+            and tag.get("value", "").strip():
+        return True
+    return False
+
+
+def analyze_html(soup) -> dict:
+    """Cheap, high-confidence WCAG 2.1 checks from static HTML (no rendering)."""
+    issues = []
+
+    def add(rule, wcag, items):
+        if items:
+            issues.append({"rule": rule, "wcag": wcag, "count": len(items),
+                           "examples": [str(i)[:100] for i in items[:3]]})
+
+    html_tag = soup.find("html")
+    lang = (html_tag.get("lang", "") if html_tag else "").strip()
+    imgs = soup.find_all("img")
+    imgs_no_alt = [i for i in imgs if i.get("alt") is None]  # alt="" is valid (decorative)
+
+    add("Images missing alt attribute", "1.1.1", imgs_no_alt)
+    controls = [c for c in soup.find_all(["input", "select", "textarea"])
+                if c.get("type", "text").lower() not in NO_LABEL_INPUT_TYPES]
+    add("Form fields without a label", "1.3.1 / 4.1.2",
+        [c for c in controls if not _has_name(c, soup)])
+    add("Links without an accessible name", "2.4.4",
+        [a for a in soup.find_all("a", href=True) if not _has_name(a, soup)])
+    add("Buttons without an accessible name", "4.1.2",
+        [b for b in soup.find_all(["button", "input"])
+         if (b.name == "button" or b.get("type") in ("submit", "button", "reset"))
+         and not _has_name(b, soup)])
+    add("Iframes without a title", "4.1.2",
+        [f for f in soup.find_all("iframe") if not f.get("title", "").strip()])
+    add("Empty headings", "1.3.1 / 2.4.6",
+        [h for h in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]) if not _text(h)])
+
+    ids = [t["id"] for t in soup.find_all(id=True)]
+    add("Duplicate id values", "4.1.1", sorted({i for i in ids if ids.count(i) > 1}))
+
+    levels = [int(h.name[1]) for h in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])]
+    h1_count = levels.count(1)
+    if h1_count != 1:
+        add("Page should have exactly one h1", "1.3.1 / 2.4.6", [f"{h1_count} h1 elements"])
+    skips = [f"h{a} -> h{b}" for a, b in zip(levels, levels[1:]) if b > a + 1]
+    add("Heading levels skipped", "1.3.1", skips)
+
+    viewport = soup.find("meta", attrs={"name": "viewport"})
+    vp = (viewport.get("content", "") if viewport else "").replace(" ", "").lower()
+    if "user-scalable=no" in vp or re.search(r"maximum-scale=1(\.0+)?(,|$)", vp):
+        add("Viewport blocks zoom", "1.4.4", [vp])
+    if not lang:
+        add("Page language not set", "3.1.1", ["<html> has no lang attribute"])
+    if not (soup.title and soup.title.string and soup.title.string.strip()):
+        add("Page has no title", "2.4.2", ["<title> missing or empty"])
+    add("Media that autoplays", "1.4.2",
+        [m for m in soup.find_all(["video", "audio"]) if m.has_attr("autoplay")])
+    add("Data tables without header cells", "1.3.1",
+        [t for t in soup.find_all("table") if len(t.find_all("tr")) > 1 and not t.find("th")])
+    if not any("skip" in _text(a).lower() and a["href"].startswith("#")
+               for a in soup.find_all("a", href=True)[:10]):
+        add("No skip-to-content link near top of page", "2.4.1", ["no skip link found"])
+
+    return {
+        "engine": "beautifulsoup",
+        "has_lang_attribute": bool(lang),
+        "page_has_title": bool(soup.title and soup.title.string and soup.title.string.strip()),
+        "images_total": len(imgs),
+        "images_missing_alt": len(imgs_no_alt),
+        "issue_count": sum(i["count"] for i in issues),
+        "issues": issues,
+        "note": "Static HTML checks only (no colour contrast or keyboard testing). "
+                "Run axe-core/Pa11y for a full WCAG 2.1 AA audit.",
+    }
+
+
 def check_accessibility(host: str, home=None) -> dict:
     """
     Signal-level only. A real WCAG audit needs axe-core/Pa11y (Node).
@@ -287,18 +381,7 @@ def check_accessibility(host: str, home=None) -> dict:
         return {"_unavailable": "Could not fetch homepage HTML."}
     try:
         from bs4 import BeautifulSoup  # type: ignore
-        soup = BeautifulSoup(html, "html.parser")
-        imgs = soup.find_all("img")
-        imgs_no_alt = [str(i)[:80] for i in imgs if not i.get("alt")]
-        html_tag = soup.find("html")
-        return {
-            "engine": "beautifulsoup",
-            "has_lang_attribute": bool(html_tag and html_tag.get("lang")),
-            "page_has_title": bool(soup.title and soup.title.string),
-            "images_total": len(imgs),
-            "images_missing_alt": len(imgs_no_alt),
-            "note": "Run axe-core/Pa11y for a full WCAG 2.1 AA audit.",
-        }
+        return analyze_html(BeautifulSoup(html, "html.parser"))
     except ImportError:
         return {
             "_unavailable": "Install beautifulsoup4 for HTML parsing.",

@@ -159,8 +159,11 @@ def main():
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    findings = (json.load(open(args.json, encoding="utf-8")) if args.json
-                else collect(args.domain))
+    if args.json:
+        with open(args.json, encoding="utf-8") as f:
+            findings = json.load(f)
+    else:
+        findings = collect(args.domain)
     client = _client()
     report = (report_single if args.single else report_agents)(
         client, args.sector, findings)

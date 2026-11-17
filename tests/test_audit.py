@@ -312,6 +312,62 @@ class TargetAllowlist(unittest.TestCase):
             self.assertTrue(audit.is_authorized(host, allow), host)
 
 
+class AccessibilityChecks(unittest.TestCase):
+    GOOD = """<html lang="en"><head><title>Ok</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1"></head><body>
+      <a href="#main">Skip to content</a><h1>Title</h1><h2>Sub</h2>
+      <img src="a.png" alt="A cat"><img src="deco.png" alt="">
+      <label for="e">Email</label><input id="e" type="text">
+      <label>Name <input type="text"></label><input type="hidden" name="t">
+      <a href="/x">Read more</a><button>Save</button><input type="submit" value="Go">
+      <iframe src="/f" title="Map"></iframe></body></html>"""
+
+    BAD = """<html><head><meta name="viewport" content="width=device-width, user-scalable=no"></head><body>
+      <h1>One</h1><h1>Two</h1><h4>Skipped</h4><h3></h3>
+      <img src="a.png"><input type="text" name="q"><a href="/x"></a><button></button>
+      <iframe src="/f"></iframe><div id="d"></div><div id="d"></div>
+      <video autoplay src="v.mp4"></video>
+      <table><tr><td>a</td></tr><tr><td>b</td></tr></table></body></html>"""
+
+    def analyze(self, html):
+        from bs4 import BeautifulSoup
+        return audit.analyze_html(BeautifulSoup(html, "html.parser"))
+
+    def rules(self, result):
+        return {i["rule"] for i in result["issues"]}
+
+    def test_accessible_page_has_no_issues(self):
+        r = self.analyze(self.GOOD)
+        self.assertEqual(r["issues"], [], r["issues"])
+        self.assertEqual(r["images_missing_alt"], 0)  # alt="" is valid for decorative images
+        self.assertEqual(r["images_total"], 2)
+
+    def test_bad_page_reports_each_problem(self):
+        r = self.analyze(self.BAD)
+        expected = {
+            "Images missing alt attribute", "Form fields without a label",
+            "Links without an accessible name", "Buttons without an accessible name",
+            "Iframes without a title", "Empty headings", "Duplicate id values",
+            "Page should have exactly one h1", "Heading levels skipped",
+            "Viewport blocks zoom", "Media that autoplays",
+            "Data tables without header cells", "No skip-to-content link near top of page",
+            "Page language not set", "Page has no title",
+        }
+        self.assertEqual(self.rules(r), expected)
+        self.assertEqual(r["issue_count"], sum(i["count"] for i in r["issues"]))
+        for issue in r["issues"]:
+            self.assertTrue(issue["wcag"])
+            self.assertLessEqual(len(issue["examples"]), 3)
+
+    def test_aria_label_counts_as_a_name(self):
+        r = self.analyze('<html lang="en"><title>t</title><h1>x</h1>'
+                         '<a href="/" aria-label="Home"></a><button aria-label="Close"></button>'
+                         '<input aria-label="Search" type="text">')
+        self.assertNotIn("Links without an accessible name", self.rules(r))
+        self.assertNotIn("Buttons without an accessible name", self.rules(r))
+        self.assertNotIn("Form fields without a label", self.rules(r))
+
+
 class Logging(unittest.TestCase):
     def test_failed_fetch_is_logged(self):
         with self.assertLogs("webaudit", level="WARNING") as cm:
