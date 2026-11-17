@@ -52,3 +52,8 @@ python report.py example.edu --sector "K-12 public school" --single
 - Respect robots.txt (already fetched)
 - Gentle rate limits — hammering a site looks like an attack
 - Keep collectors structurally incapable of active testing
+
+## Tests
+```bash
+python -m unittest discover -s tests -v   # offline, no network needed
+```

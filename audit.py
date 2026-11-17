@@ -106,6 +106,9 @@ SECURITY_HEADERS = {
 
 def check_headers(host: str) -> dict:
     status, headers, _ = _get(f"https://{host}/")
+    if status is None:
+        return {"_unavailable": f"Could not fetch https://{host}/ "
+                                f"({headers.get('_error', 'unknown error')})."}
     present, missing = {}, {}
     for h, why in SECURITY_HEADERS.items():
         if h in headers:
@@ -125,6 +128,9 @@ def check_headers(host: str) -> dict:
 def check_http_redirect(host: str) -> dict:
     """Does plain http:// redirect to https://?"""
     status, headers, _ = _get(f"http://{host}/")
+    if status is None:
+        return {"_unavailable": f"Could not fetch http://{host}/ "
+                                f"({headers.get('_error', 'unknown error')})."}
     loc = headers.get("location", "")
     return {"http_status": status, "redirects_to_https": loc.startswith("https://"),
             "location": loc or None}
@@ -136,12 +142,16 @@ def _txt_records(name: str):
     """Get TXT records. Tries dnspython, falls back to `dig`, then `nslookup`."""
     try:
         import dns.resolver  # type: ignore
-        return [b"".join(r.strings).decode() if hasattr(r, "strings") else str(r)
-                for r in dns.resolver.resolve(name, "TXT")]
+        import dns.exception  # type: ignore
+        try:
+            return [b"".join(r.strings).decode() if hasattr(r, "strings") else str(r)
+                    for r in dns.resolver.resolve(name, "TXT", lifetime=TIMEOUT)]
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            return []          # authoritative "no such record"
+        except dns.exception.DNSException:
+            return None        # timeout / no nameservers: result unknown
     except ImportError:
         pass
-    except Exception:
-        return []
     for cmd in (["dig", "+short", "TXT", name], ["nslookup", "-type=TXT", name]):
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
@@ -156,10 +166,15 @@ def check_email_auth(host: str) -> dict:
     out = {}
     spf = _txt_records(host)
     if spf is None:
-        return {"_unavailable": "No DNS resolver (install dnspython or dig)."}
+        return {"_unavailable": "DNS lookup failed or no resolver available "
+                                "(install dnspython or dig); SPF/DMARC status unknown."}
     out["spf"] = next((r for r in spf if r.lower().startswith("v=spf1")), None)
-    dmarc = _txt_records(f"_dmarc.{host}") or []
-    out["dmarc"] = next((r for r in dmarc if r.lower().startswith("v=dmarc1")), None)
+    dmarc = _txt_records(f"_dmarc.{host}")
+    if dmarc is None:
+        out["dmarc"] = None
+        out["dmarc_unavailable"] = "DNS lookup failed; DMARC status unknown."
+    else:
+        out["dmarc"] = next((r for r in dmarc if r.lower().startswith("v=dmarc1")), None)
     # DKIM selectors are unknown without the mail config; note it.
     out["dkim_note"] = "DKIM uses org-specific selectors; verify with their mail admin."
     return out
@@ -172,12 +187,14 @@ POLICY_PATHS = ["/privacy", "/privacy-policy", "/privacy.html",
 
 
 def check_privacy(host: str) -> dict:
+    status, _, home = _get(f"https://{host}/")
+    if status is None:
+        return {"_unavailable": "Could not fetch homepage; privacy signals unknown."}
     found = {}
     for p in POLICY_PATHS:
         status, _, _ = _get(f"https://{host}{p}")
         if status == 200:
             found[p] = True
-    _, _, home = _get(f"https://{host}/")
     low = home.lower()
     return {
         "policy_pages_found": list(found.keys()),
