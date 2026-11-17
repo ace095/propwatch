@@ -33,7 +33,7 @@ class FailedFetchIsUnknownNotMissing(unittest.TestCase):
         self.assertNotIn("spf", r)
 
     def test_dmarc_lookup_failure_not_reported_as_missing(self):
-        def fake(name):
+        def fake(name, must_exist=False):
             return ["v=spf1 -all"] if not name.startswith("_dmarc") else None
         with mock.patch.object(audit, "_txt_records", side_effect=fake):
             r = audit.check_email_auth("x.test")
@@ -57,7 +57,7 @@ class RealFindingsStillReported(unittest.TestCase):
             self.assertFalse(audit.check_http_redirect("x.test")["redirects_to_https"])
 
     def test_no_dmarc_record_is_a_real_finding(self):
-        def fake(name):
+        def fake(name, must_exist=False):
             return ["v=spf1 -all"] if not name.startswith("_dmarc") else []
         with mock.patch.object(audit, "_txt_records", side_effect=fake):
             r = audit.check_email_auth("x.test")

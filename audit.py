@@ -138,7 +138,7 @@ def check_http_redirect(host: str) -> dict:
 
 # ---------- collector: DNS email auth (SPF/DKIM/DMARC) ----------
 
-def _txt_records(name: str):
+def _txt_records(name: str, must_exist: bool = False):
     """Get TXT records. Tries dnspython, falls back to `dig`, then `nslookup`."""
     try:
         import dns.resolver  # type: ignore
@@ -146,8 +146,12 @@ def _txt_records(name: str):
         try:
             return [b"".join(r.strings).decode() if hasattr(r, "strings") else str(r)
                     for r in dns.resolver.resolve(name, "TXT", lifetime=TIMEOUT)]
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            return []          # authoritative "no such record"
+        except dns.resolver.NXDOMAIN:
+            # A real domain's own name is never NXDOMAIN, so for must_exist
+            # lookups this means a broken/filtering resolver: result unknown.
+            return None if must_exist else []
+        except dns.resolver.NoAnswer:
+            return []          # name exists, no TXT record
         except dns.exception.DNSException:
             return None        # timeout / no nameservers: result unknown
     except ImportError:
@@ -164,7 +168,7 @@ def _txt_records(name: str):
 
 def check_email_auth(host: str) -> dict:
     out = {}
-    spf = _txt_records(host)
+    spf = _txt_records(host, must_exist=True)
     if spf is None:
         return {"_unavailable": "DNS lookup failed or no resolver available "
                                 "(install dnspython or dig); SPF/DMARC status unknown."}
