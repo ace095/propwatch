@@ -54,6 +54,19 @@ generate the written report (uses Claude API credits, asks first) and download i
 Markdown or PDF. Every scan is also saved under `scans/`. The UI listens on this
 computer only (127.0.0.1) and still refuses unauthorized targets.
 
+## Scheduled scans and history
+```bash
+python scheduler.py add client.edu --every 168 --sector "K-12 public school"   # weekly
+python scheduler.py run-due      # scan whatever is due (put this in Windows Task Scheduler)
+python scheduler.py diff client.edu      # what is new / fixed since the previous scan
+python scheduler.py history client.edu
+python ui.py --schedule          # or let the UI run due scans itself
+```
+Results are kept in `webaudit.db` (SQLite). Each scan is compared with the previous
+successful one: new problems, fixed problems, unchanged. A site that fails to scan is
+recorded as a failure and is not hammered again before its next slot. Only authorized
+targets can be added.
+
 ## Run a scan
 ```bash
 python audit.py example.edu                 # prints JSON
@@ -78,7 +91,7 @@ python pdf_export.py report.md report.pdf    # convert an existing markdown repo
 ## Roadmap (next steps)
 - (done) Real-browser WCAG audit with axe-core
 - Split the single report prompt into Accessibility / Privacy / Security agents
-- Add a job queue + Postgres so you can scan many domains on a schedule
+- (done) Scheduled scans with history (SQLite); move to Postgres and a job queue when scanning hundreds of sites
 - (done) Allowlist of authorized targets and per-host rate limiting
 
 ## Guardrails to keep

@@ -5,3 +5,4 @@ out.json
 .env
 
 scans/
+webaudit.db

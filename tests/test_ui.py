@@ -39,6 +39,10 @@ class UiServer(unittest.TestCase):
         cls.server.server_close()
 
     def setUp(self):
+        db_dir = self.enterContext(self.tmp())
+        env = mock.patch.dict(os.environ, {"WEBAUDIT_DB": os.path.join(db_dir, "ui.db")})
+        env.start()
+        self.addCleanup(env.stop)
         patches = [
             mock.patch.object(audit, "load_allowlist", return_value=["x.test"]),
             mock.patch.object(audit, "run_audit", side_effect=fake_run_audit),
@@ -146,6 +150,33 @@ class UiServer(unittest.TestCase):
             done = self.wait_for(job["id"], key="report")
         self.assertEqual(done["report"]["status"], "error")
         self.assertIn("ANTHROPIC_API_KEY", done["report"]["error"])
+
+    def test_second_scan_reports_what_changed(self):
+        results = [dict(RESULT, headers={"missing": {"csp": "x", "hsts": "y"}}), dict(RESULT, headers={"missing": {"csp": "x"}})]
+        with mock.patch.object(audit, "run_audit", side_effect=lambda *a, **k: results.pop(0)):
+            _, first = self.json("/api/scan", {"domain": "x.test"})
+            first = self.wait_for(first["id"])
+            _, second = self.json("/api/scan", {"domain": "x.test"})
+            second = self.wait_for(second["id"])
+        self.assertTrue(first["diff"]["first_scan"])
+        self.assertEqual(second["diff"]["resolved"], ["headers:missing:hsts"])
+        self.assertEqual((second["diff"]["new"], second["diff"]["unchanged"]), ([], 1))
+
+    def test_monitor_add_list_and_remove(self):
+        status, body = self.json("/api/monitor", {"domain": "https://X.test/", "every_hours": 24})
+        self.assertEqual(status, 200)
+        self.assertEqual([(m["domain"], m["every_hours"]) for m in body["monitored"]], [("x.test", 24)])
+        self.assertEqual(self.json("/api/monitor")[1]["monitored"][0]["domain"], "x.test")
+        self.assertEqual(self.json("/api/monitor/remove", {"domain": "x.test"})[1]["monitored"], [])
+
+    def test_monitor_refuses_unauthorized_and_bad_interval(self):
+        status, body = self.json("/api/monitor", {"domain": "stranger.test"})
+        self.assertEqual((status, body["refused"]), (403, True))
+        self.assertEqual(self.json("/api/monitor", {"domain": "x.test", "every_hours": "soon"})[0], 400)
+
+    def test_monitor_interval_is_clamped(self):
+        _, body = self.json("/api/monitor", {"domain": "x.test", "every_hours": 999999})
+        self.assertEqual(body["monitored"][0]["every_hours"], 24 * 90)
 
     def test_scan_error_is_surfaced(self):
         with mock.patch.object(audit, "run_audit", side_effect=RuntimeError("boom")):

@@ -20,6 +20,8 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import audit
+import scheduler
+from contextlib import closing
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCANS_DIR = os.path.join(HERE, "scans")
@@ -53,7 +55,7 @@ def install_log_capture() -> logging.Handler:
 def _new_job(domain: str) -> dict:
     job = {"id": uuid.uuid4().hex[:12], "domain": domain, "status": "running",
            "steps": {s: "pending" for s in audit.AUDIT_STEPS}, "log": [],
-           "result": None, "error": None, "saved_to": None,
+           "result": None, "error": None, "saved_to": None, "diff": None,
            "report": {"status": "none", "markdown": None, "error": None}}
     JOBS[job["id"]] = job
     return job
@@ -75,6 +77,10 @@ def _scan_worker(job: dict) -> None:
             job["domain"], on_step=lambda name, state: job["steps"].update({name: state}))
         job["saved_to"] = _save(job["result"])
         log.info("Saved %s", job["saved_to"])
+        with closing(scheduler.connect()) as conn:
+            job["diff"] = scheduler.record_run(conn, job["domain"], result=job["result"])
+        log.info("Compared with the previous scan: %d new, %d resolved",
+                 len(job["diff"]["new"]), len(job["diff"]["resolved"]))
         job["status"] = "done"
     except Exception as e:  # shown to the user, never silently dropped
         log.exception("scan failed")
@@ -113,7 +119,7 @@ def start_scan(domain: str) -> dict:
 
 def public(job: dict) -> dict:
     return {k: job[k] for k in
-            ("id", "domain", "status", "steps", "log", "result", "error", "saved_to", "report")}
+            ("id", "domain", "status", "steps", "log", "result", "error", "saved_to", "diff", "report")}
 
 
 def pdf_bytes(markdown_text: str) -> bytes:
@@ -159,6 +165,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, f.read(), "text/html; charset=utf-8")
         if path == "/api/targets":
             return self._json(200, targets())
+        if path == "/api/monitor":
+            with closing(scheduler.connect()) as conn:
+                return self._json(200, {"monitored": scheduler.summarize_targets(conn)})
         m = re.fullmatch(r"/api/jobs/([0-9a-f]+)", path)
         if m and (job := self._job(m.group(1))):
             return self._json(200, public(job))
@@ -166,6 +175,21 @@ class Handler(BaseHTTPRequestHandler):
         if m and (job := self._job(m.group(1))):
             return self._download(job, query)
         self._json(404, {"error": "not found"})
+
+    def _monitor(self, data):
+        domain = data.get("domain") or ""
+        with closing(scheduler.connect()) as conn:
+            if self.path.endswith("/remove"):
+                scheduler.remove_target(conn, domain)
+            else:
+                try:
+                    every = max(1, min(int(data.get("every_hours") or 168), 24 * 90))
+                    scheduler.add_target(conn, domain, every, (data.get("sector") or "")[:80] or None)
+                except audit.TargetNotAuthorized as e:
+                    return self._json(403, {"error": str(e), "refused": True})
+                except ValueError:
+                    return self._json(400, {"error": "every_hours must be a number"})
+            return self._json(200, {"monitored": scheduler.summarize_targets(conn)})
 
     def _download(self, job, query):
         kind = dict(p.split("=", 1) for p in query.split("&") if "=" in p).get("kind")
@@ -195,6 +219,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(403, {"error": str(e), "refused": True})
             except ValueError as e:
                 return self._json(400, {"error": str(e)})
+        if self.path in ("/api/monitor", "/api/monitor/remove"):
+            return self._monitor(data)
         m = re.fullmatch(r"/api/jobs/([0-9a-f]+)/report", self.path)
         if m and (job := self._job(m.group(1))):
             if job["status"] != "done":
@@ -208,6 +234,16 @@ class Handler(BaseHTTPRequestHandler):
         self._json(404, {"error": "not found"})
 
 
+def _schedule_loop(every_minutes: int = 15) -> None:
+    while True:
+        try:
+            with closing(scheduler.connect()) as conn:
+                scheduler.run_due(conn)
+        except Exception:
+            log.exception("scheduled run failed")
+        time.sleep(every_minutes * 60)
+
+
 def make_server(port: int = 8765) -> ThreadingHTTPServer:
     return ThreadingHTTPServer(("127.0.0.1", port), Handler)
 
@@ -215,9 +251,13 @@ def make_server(port: int = 8765) -> ThreadingHTTPServer:
 def main():
     ap = argparse.ArgumentParser(description="webaudit local web UI")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--schedule", action="store_true",
+                    help="also run monitored sites when they are due (checks every 15 minutes)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     install_log_capture()
+    if args.schedule:
+        threading.Thread(target=_schedule_loop, daemon=True).start()
     server = make_server(args.port)
     log.info("webaudit UI on http://127.0.0.1:%d  (Ctrl+C to stop)", args.port)
     try:
