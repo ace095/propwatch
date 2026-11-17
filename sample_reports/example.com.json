@@ -1,6 +1,6 @@
 {
   "target": "example.com",
-  "scanned_at": "2026-11-17T05:35:22.672976+00:00",
+  "scanned_at": "2026-11-17T06:10:38.143669+00:00",
   "scan_type": "passive",
   "robots": {
     "found": false,
@@ -8,41 +8,26 @@
   },
   "tls": {
     "reachable": false,
-    "error": "[Errno -2] Name or service not known"
+    "cert_valid": false,
+    "error": "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1000)"
   },
   "headers": {
-    "http_status": 200,
-    "redirects_to_https": null,
-    "present": {},
-    "missing": {
-      "strict-transport-security": "HSTS \u2014 forces HTTPS",
-      "content-security-policy": "CSP \u2014 mitigates XSS/injection",
-      "x-frame-options": "Clickjacking protection",
-      "x-content-type-options": "MIME-sniffing protection",
-      "referrer-policy": "Controls referrer leakage",
-      "permissions-policy": "Restricts browser features"
-    },
-    "server": "cloudflare",
-    "powered_by": null
+    "_unavailable": "Could not fetch https://example.com/ (<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1000)>)."
   },
   "http_redirect": {
-    "_unavailable": "Could not fetch http://example.com/ (<urlopen error [Errno -2] Name or service not known>)."
+    "http_status": 200,
+    "redirects_to_https": false,
+    "location": null
   },
   "email_auth": {
-    "_unavailable": "DNS lookup failed or no resolver available (install dnspython or dig); SPF/DMARC status unknown."
+    "spf": "v=spf1 -all",
+    "dmarc": "v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s",
+    "dkim_note": "DKIM uses org-specific selectors; verify with their mail admin."
   },
   "privacy": {
-    "policy_pages_found": [],
-    "mentions_cookies": false,
-    "has_analytics": false,
-    "cookie_banner_hint": false
+    "_unavailable": "Could not fetch homepage; privacy signals unknown."
   },
   "accessibility": {
-    "engine": "beautifulsoup",
-    "has_lang_attribute": true,
-    "page_has_title": true,
-    "images_total": 0,
-    "images_missing_alt": 0,
-    "note": "Run axe-core/Pa11y for a full WCAG 2.1 AA audit."
+    "_unavailable": "Could not fetch homepage HTML."
   }
 }
