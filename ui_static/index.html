@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebAudit</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1b2430; --muted: #66707d; --line: #dfe3e8;
+    --accent: #1f4e79; --accent-text: #ffffff;
+    --good: #1a7f4b; --good-bg: #e3f4ea; --warn: #9a6700; --warn-bg: #fff3d1;
+    --bad: #b42318; --bad-bg: #fde7e4; --unk: #5b6573; --unk-bg: #e9ecf0;
+    --console: #11161d; --console-text: #cfd8e3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c; --card: #1b222b; --text: #e6ebf1; --muted: #98a3b1; --line: #2c3541;
+      --accent: #6fa8dc; --accent-text: #0e1620;
+      --good: #5fd49a; --good-bg: #17392a; --warn: #f0c24b; --warn-bg: #3d3414;
+      --bad: #ff8a7d; --bad-bg: #44201c; --unk: #aab4c1; --unk-bg: #2a323d;
+      --console: #0b0f14;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 16px; margin-bottom: 16px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  input[type=text] { flex: 1 1 260px; padding: 10px 12px; font: inherit; color: var(--text);
+          background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+  button { padding: 10px 16px; font: inherit; font-weight: 600; border-radius: 8px; cursor: pointer;
+           border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); }
+  button.secondary { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { padding: 3px 10px; border-radius: 999px; font-size: 13px; background: var(--unk-bg); color: var(--unk); }
+  .chip.running { background: var(--warn-bg); color: var(--warn); }
+  .chip.done { background: var(--good-bg); color: var(--good); }
+  .banner { padding: 10px 12px; border-radius: 8px; margin-top: 12px; display: none; }
+  .banner.bad { display: block; background: var(--bad-bg); color: var(--bad); }
+  .banner.ok { display: block; background: var(--good-bg); color: var(--good); }
+  #console { background: var(--console); color: var(--console-text); border-radius: 8px; padding: 10px 12px;
+             font: 12.5px/1.55 ui-monospace, Consolas, monospace; height: 190px; overflow: auto; margin-top: 12px;
+             white-space: pre-wrap; word-break: break-word; }
+  #console .WARNING { color: #f0c24b; } #console .ERROR { color: #ff8a7d; } #console .DEBUG { color: #7f8b99; }
+  .tally { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tally div { flex: 1 1 110px; padding: 10px 12px; border-radius: 8px; text-align: center; }
+  .tally b { display: block; font-size: 24px; }
+  .good { background: var(--good-bg); color: var(--good); } .warn { background: var(--warn-bg); color: var(--warn); }
+  .bad { background: var(--bad-bg); color: var(--bad); } .unk { background: var(--unk-bg); color: var(--unk); }
+  .section { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+  .section h3 { margin: 0; padding: 10px 14px; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
+  .section ul { margin: 0; padding: 10px 14px 12px 32px; color: var(--text); }
+  .section li { margin: 2px 0; } .section li small { color: var(--muted); }
+  .badge { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; text-transform: uppercase; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto;
+        font-size: 12.5px; max-height: 360px; }
+  details summary { cursor: pointer; color: var(--muted); }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WebAudit</h1>
+  <p class="sub">Passive website security and compliance scan. Reads only public information.</p>
+
+  <section class="card">
+    <form id="form" class="row" autocomplete="off">
+      <input type="text" id="domain" list="targets" placeholder="example.com" aria-label="Domain to scan" required>
+      <datalist id="targets"></datalist>
+      <button type="submit" id="scan">Run scan</button>
+    </form>
+    <p class="hint" id="targetsHint"></p>
+    <div class="banner" id="banner" role="status"></div>
+    <div class="chips" id="chips"></div>
+    <div id="console" hidden aria-label="Scan log"></div>
+  </section>
+
+  <section class="card" id="results" hidden>
+    <div class="tally" id="tally"></div>
+    <div id="sections"></div>
+    <div class="actions" style="margin-top:14px">
+      <button class="secondary" id="dlJson">Download findings (JSON)</button>
+      <input type="text" id="sector" placeholder="Sector, e.g. K-12 public school" style="flex:0 1 260px" aria-label="Sector">
+      <button id="makeReport">Generate report</button>
+    </div>
+    <p class="hint">Generating a report calls the Claude API and uses your API credits.</p>
+    <div id="reportBox" hidden>
+      <div class="actions" style="margin:12px 0 8px">
+        <button class="secondary" id="dlMd">Download report (.md)</button>
+        <button class="secondary" id="dlPdf">Download report (.pdf)</button>
+      </div>
+      <details open><summary>Report preview</summary><pre id="reportText"></pre></details>
+    </div>
+    <details style="margin-top:12px"><summary>Raw findings</summary><pre id="raw"></pre></details>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STEP_LABELS = { robots: "robots.txt", homepage: "Homepage", tls: "Encryption (TLS)", headers: "Security headers",
+  http_redirect: "HTTP to HTTPS", email_auth: "Email spoofing", privacy: "Privacy", accessibility: "Accessibility" };
+let jobId = null, timer = null;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, body };
+}
+function banner(kind, text) {
+  const b = $("banner"); b.className = "banner " + (kind || ""); b.textContent = text || "";
+}
+
+async function loadTargets() {
+  const { body } = await api("/api/targets");
+  const dl = $("targets"); dl.replaceChildren();
+  body.targets.forEach((t) => { const o = el("option"); o.value = t; dl.appendChild(o); });
+  $("targetsHint").textContent = body.targets.length
+    ? "Only authorized targets can be scanned. Edit " + body.file + " to add a client after they approve."
+    : "No authorized targets yet. Add domains to " + body.file + ".";
+}
+
+$("form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  clearInterval(timer);
+  $("results").hidden = true; $("reportBox").hidden = true; banner();
+  const { ok, body } = await api("/api/scan", { method: "POST", body: JSON.stringify({ domain: $("domain").value }) });
+  if (!ok) { banner("bad", body.refused ? "Refused: " + body.error : body.error); $("chips").replaceChildren(); return; }
+  jobId = body.id;
+  $("console").hidden = false; $("scan").disabled = true;
+  poll();
+  timer = setInterval(poll, 700);
+});
+
+function renderChips(steps) {
+  const c = $("chips"); c.replaceChildren();
+  Object.entries(steps).forEach(([k, v]) => c.appendChild(el("span", "chip " + v, STEP_LABELS[k] || k)));
+}
+function renderLog(lines) {
+  const c = $("console"); const stick = c.scrollTop + c.clientHeight >= c.scrollHeight - 20;
+  c.replaceChildren();
+  lines.forEach((l) => c.appendChild(el("div", l.level, l.t + "  " + l.msg)));
+  if (stick) c.scrollTop = c.scrollHeight;
+}
+
+async function poll() {
+  const { body: job } = await api("/api/jobs/" + jobId);
+  renderChips(job.steps); renderLog(job.log);
+  if (job.status === "running") return;
+  clearInterval(timer); $("scan").disabled = false;
+  if (job.status === "error") { banner("bad", "Scan failed: " + job.error); return; }
+  banner("ok", "Scan finished for " + job.domain + (job.saved_to ? ". Saved to " + job.saved_to : ""));
+  renderResults(job.result);
+  renderReport(job.report);
+}
+
+// ---- turning findings into plain statuses ----
+const S = { good: "Good", warn: "Needs attention", bad: "Problem", unk: "Unknown" };
+function assess(r) {
+  const out = [];
+  const t = r.tls || {};
+  if (t.reachable) {
+    const d = t.days_until_expiry;
+    out.push(["Encryption (TLS)", d !== undefined && d < 30 ? "warn" : "good", [
+      "Version " + t.tls_version, "Certificate expires in " + d + " days", "Issuer: " + ((t.issuer || {}).organizationName || "unknown")]]);
+  } else if (t.cert_problem) {
+    out.push(["Encryption (TLS)", "bad", ["Certificate problem: " + t.cert_problem.replace(/_/g, " "), t.error]]);
+  } else out.push(["Encryption (TLS)", "unk", [t.error || "Could not check"]]);
+
+  const h = r.headers || {};
+  if (h._unavailable) out.push(["Security headers", "unk", [h._unavailable]]);
+  else {
+    const have = Object.keys(h.present || {}).length, miss = Object.keys(h.missing || {});
+    out.push(["Security headers", miss.length === 0 ? "good" : have ? "warn" : "bad",
+      [have + " of " + (have + miss.length) + " present"].concat(miss.map((m) => "Missing: " + m))]);
+  }
+  const rd = r.http_redirect || {};
+  if (rd._unavailable) out.push(["HTTP to HTTPS redirect", "unk", [rd._unavailable]]);
+  else out.push(["HTTP to HTTPS redirect", rd.redirects_to_https ? "good" : "bad",
+    [rd.redirects_to_https ? "Plain http:// sends visitors to " + rd.location : "http:// loads without redirecting (status " + rd.http_status + ")"]]);
+
+  const e = r.email_auth || {};
+  if (e._unavailable) out.push(["Email spoofing protection", "unk", [e._unavailable]]);
+  else {
+    const lines = ["SPF: " + (e.spf || "not found"), "DMARC: " + (e.dmarc || (e.dmarc_unavailable || "not found"))];
+    out.push(["Email spoofing protection", e.spf && e.dmarc ? "good" : (e.spf || e.dmarc) ? "warn" : "bad", lines]);
+  }
+  const p = r.privacy || {};
+  if (p._unavailable) out.push(["Privacy signals", "unk", [p._unavailable]]);
+  else out.push(["Privacy signals", (p.policy_pages_found || []).length ? "good" : "warn", [
+    (p.policy_pages_found || []).length ? "Policy pages: " + p.policy_pages_found.join(", ") : "No privacy policy page found",
+    p.mentions_cookies ? "Mentions cookies" + (p.cookie_banner_hint ? " (banner detected)" : " (no banner detected)") : "No cookie mentions",
+    p.has_analytics ? "Analytics detected" : "No analytics detected"]]);
+
+  const a = r.accessibility || {};
+  if (a._unavailable) out.push(["Accessibility (basic WCAG)", "unk", [a._unavailable]]);
+  else out.push(["Accessibility (basic WCAG)", a.issue_count ? "warn" : "good",
+    (a.issues || []).map((i) => i.rule + " [WCAG " + i.wcag + "]: " + i.count).concat(a.issue_count ? [] : ["No issues found by the static checks"])]);
+
+  const ro = r.robots || {};
+  out.push(["robots.txt", "unk", [ro.found ? (ro.disallow_rules || []).length + " disallow rules listed" : "No robots.txt found"]]);
+  return out;
+}
+
+function renderResults(result) {
+  const items = assess(result), count = { good: 0, warn: 0, bad: 0, unk: 0 };
+  items.forEach((i) => count[i[1]]++);
+  const tally = $("tally"); tally.replaceChildren();
+  ["good", "warn", "bad", "unk"].forEach((k) => {
+    const d = el("div", k); d.appendChild(el("b", "", String(count[k]))); d.appendChild(document.createTextNode(S[k])); tally.appendChild(d);
+  });
+  const box = $("sections"); box.replaceChildren();
+  items.forEach(([title, status, lines]) => {
+    const s = el("div", "section"), h = el("h3", "", title);
+    h.appendChild(el("span", "badge " + status, S[status])); s.appendChild(h);
+    const ul = el("ul"); lines.forEach((l) => { const li = el("li"); li.textContent = l; ul.appendChild(li); });
+    s.appendChild(ul); box.appendChild(s);
+  });
+  $("raw").textContent = JSON.stringify(result, null, 2);
+  $("results").hidden = false;
+}
+
+// ---- report ----
+function renderReport(rep) {
+  const btn = $("makeReport");
+  btn.disabled = rep.status === "running";
+  btn.textContent = rep.status === "running" ? "Generating..." : "Generate report";
+  if (rep.status === "error") banner("bad", "Report failed: " + rep.error);
+  if (rep.status === "done") { $("reportBox").hidden = false; $("reportText").textContent = rep.markdown; }
+}
+$("makeReport").addEventListener("click", async () => {
+  if (!confirm("Generate the report with the Claude API? This uses API credits.")) return;
+  const { ok, body } = await api("/api/jobs/" + jobId + "/report", { method: "POST", body: JSON.stringify({ sector: $("sector").value }) });
+  if (!ok) { banner("bad", body.error); return; }
+  $("makeReport").disabled = true; $("makeReport").textContent = "Generating...";
+  const t = setInterval(async () => {
+    const { body: job } = await api("/api/jobs/" + jobId);
+    renderLog(job.log);
+    if (job.report.status !== "running") { clearInterval(t); renderReport(job.report); }
+  }, 1000);
+});
+const dl = (kind) => () => { location.href = "/api/jobs/" + jobId + "/download?kind=" + kind; };
+$("dlJson").addEventListener("click", dl("json"));
+$("dlMd").addEventListener("click", dl("md"));
+$("dlPdf").addEventListener("click", dl("pdf"));
+
+loadTargets();
+</script>
+</body>
+</html>

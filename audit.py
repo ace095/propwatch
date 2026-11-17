@@ -426,25 +426,38 @@ def require_authorized(host: str, allowlist_path: str = None) -> None:
 
 # ---------- orchestrator ----------
 
-def run_audit(domain: str, allowlist_path: str = None) -> dict:
+AUDIT_STEPS = ["robots", "homepage", "tls", "headers", "http_redirect",
+               "email_auth", "privacy", "accessibility"]
+
+
+def run_audit(domain: str, allowlist_path: str = None, on_step=None) -> dict:
+    """Run every passive check. on_step(name, "running" | "done") reports progress."""
     host = _norm(domain)
     require_authorized(host, allowlist_path)
     log.info("Auditing %s (passive)", host)
-    robots = check_robots(host)
-    home = _fetch_home(host)
-    result = {
+
+    def step(name, fn, *args):
+        if on_step:
+            on_step(name, "running")
+        out = fn(*args)
+        if on_step:
+            on_step(name, "done")
+        return out
+
+    robots = step("robots", check_robots, host)
+    home = step("homepage", _fetch_home, host)
+    return {
         "target": host,
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": "passive",
         "robots": robots,
-        "tls": check_tls(host),
-        "headers": check_headers(host, home),
-        "http_redirect": check_http_redirect(host),
-        "email_auth": check_email_auth(host),
-        "privacy": check_privacy(host, home),
-        "accessibility": check_accessibility(host, home),
+        "tls": step("tls", check_tls, host),
+        "headers": step("headers", check_headers, host, home),
+        "http_redirect": step("http_redirect", check_http_redirect, host),
+        "email_auth": step("email_auth", check_email_auth, host),
+        "privacy": step("privacy", check_privacy, host, home),
+        "accessibility": step("accessibility", check_accessibility, host, home),
     }
-    return result
 
 
 def main():

@@ -115,7 +115,8 @@ def collect(domain):
 
 def report_single(client, sector, findings):
     here = os.path.dirname(os.path.abspath(__file__))
-    system = open(os.path.join(here, "system_prompt.txt")).read()
+    with open(os.path.join(here, "system_prompt.txt"), encoding="utf-8") as f:
+        system = f.read()
     user = (f"Sector: {sector}\nTarget: {findings.get('target')}\n\n"
             f"Raw passive-scan findings:\n{json.dumps(findings, indent=2)}\n\n"
             "Write the audit report.")

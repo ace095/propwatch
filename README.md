@@ -33,6 +33,17 @@ client-school.edu   # signed by J. Smith, 2026-11-20
 ```
 Use another file with `--allowlist FILE` or the `WEBAUDIT_ALLOWLIST` environment variable.
 
+## Web UI (see the process live)
+```bash
+python ui.py          # then open http://127.0.0.1:8765
+```
+Type or pick an authorized domain and press **Run scan**. Each check lights up as it
+runs, the request log streams underneath, and the results appear as Good / Needs
+attention / Problem / Unknown cards. From there you can download the findings (JSON),
+generate the written report (uses Claude API credits, asks first) and download it as
+Markdown or PDF. Every scan is also saved under `scans/`. The UI listens on this
+computer only (127.0.0.1) and still refuses unauthorized targets.
+
 ## Run a scan
 ```bash
 python audit.py example.edu                 # prints JSON
@@ -67,7 +78,7 @@ python pdf_export.py report.md report.pdf    # convert an existing markdown repo
 
 ## Tests
 ```bash
-python -m unittest tests.test_audit -v   # offline: network is mocked, runs anywhere (seconds)
+python -m unittest tests.test_audit tests.test_ui -v   # offline: network and Claude API mocked, runs anywhere (seconds)
 python -m unittest tests.test_live -v    # live: scans real test sites (about 2 minutes)
 WEBAUDIT_LOG=1 python -m unittest tests.test_live -v   # same, with every request logged
 ```
