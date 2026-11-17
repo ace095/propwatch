@@ -116,6 +116,20 @@ class RedirectHandling(unittest.TestCase):
             self.assertTrue(audit.check_http_redirect("x.test")["redirects_to_https"])
 
 
+class HomepageFetchedOnce(unittest.TestCase):
+    def test_run_audit_downloads_homepage_once(self):
+        home = (200, {}, "<html lang='en'><title>t</title></html>")
+        calls = []
+
+        def fake_get(url, follow_redirects=True):
+            calls.append(url)
+            return home if url == "https://x.test/" else (404, {}, "")
+
+        with mock.patch.object(audit, "_get", side_effect=fake_get),              mock.patch.object(audit, "check_tls", return_value={}),              mock.patch.object(audit, "check_email_auth", return_value={}):
+            audit.run_audit("x.test")
+        self.assertEqual(calls.count("https://x.test/"), 1)
+
+
 class Logging(unittest.TestCase):
     def test_failed_fetch_is_logged(self):
         with self.assertLogs("webaudit", level="WARNING") as cm:

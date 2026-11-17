@@ -134,8 +134,12 @@ SECURITY_HEADERS = {
 }
 
 
-def check_headers(host: str) -> dict:
-    status, headers, _ = _get(f"https://{host}/")
+def _fetch_home(host: str):
+    return _get(f"https://{host}/")
+
+
+def check_headers(host: str, home=None) -> dict:
+    status, headers, _ = home or _fetch_home(host)
     if status is None:
         return {"_unavailable": f"Could not fetch https://{host}/ "
                                 f"({headers.get('_error', 'unknown error')})."}
@@ -220,8 +224,8 @@ POLICY_PATHS = ["/privacy", "/privacy-policy", "/privacy.html",
                 "/terms", "/accessibility", "/cookie-policy"]
 
 
-def check_privacy(host: str) -> dict:
-    status, _, home = _get(f"https://{host}/")
+def check_privacy(host: str, home=None) -> dict:
+    status, _, home = home or _fetch_home(host)
     if status is None:
         return {"_unavailable": "Could not fetch homepage; privacy signals unknown."}
     found = {}
@@ -242,12 +246,12 @@ def check_privacy(host: str) -> dict:
 
 # ---------- collector: lightweight accessibility signals ----------
 
-def check_accessibility(host: str) -> dict:
+def check_accessibility(host: str, home=None) -> dict:
     """
     Signal-level only. A real WCAG audit needs axe-core/Pa11y (Node).
     This flags a few cheap, high-confidence issues from the homepage HTML.
     """
-    _, _, html = _get(f"https://{host}/")
+    _, _, html = home or _fetch_home(host)
     if not html:
         return {"_unavailable": "Could not fetch homepage HTML."}
     try:
@@ -277,17 +281,18 @@ def run_audit(domain: str) -> dict:
     host = _norm(domain)
     log.info("Auditing %s (passive)", host)
     robots = check_robots(host)
+    home = _fetch_home(host)
     result = {
         "target": host,
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "scan_type": "passive",
         "robots": robots,
         "tls": check_tls(host),
-        "headers": check_headers(host),
+        "headers": check_headers(host, home),
         "http_redirect": check_http_redirect(host),
         "email_auth": check_email_auth(host),
-        "privacy": check_privacy(host),
-        "accessibility": check_accessibility(host),
+        "privacy": check_privacy(host, home),
+        "accessibility": check_accessibility(host, home),
     }
     return result
 
