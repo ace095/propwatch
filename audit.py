@@ -44,11 +44,25 @@ def _norm(domain: str) -> str:
     return d.split("/")[0].strip().lower()
 
 
+def _ssl_context() -> ssl.SSLContext:
+    """TLS context with a complete, up-to-date CA list.
+
+    The OS/Python CA store is often incomplete (notably on Windows), which made
+    valid sites fail verification and get reported as broken. Prefer certifi's
+    bundle when available; fall back to the system store otherwise.
+    """
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
 def _get(url: str):
     """Fetch a URL passively. Returns (status, headers_dict, body_text)."""
     req = Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urlopen(req, timeout=TIMEOUT, context=ssl.create_default_context()) as r:
+        with urlopen(req, timeout=TIMEOUT, context=_ssl_context()) as r:
             body = r.read(500_000).decode("utf-8", "replace")
             return r.status, {k.lower(): v for k, v in r.headers.items()}, body
     except HTTPError as e:
@@ -71,7 +85,7 @@ def check_robots(host: str) -> dict:
 
 def check_tls(host: str) -> dict:
     out = {"reachable": False}
-    ctx = ssl.create_default_context()
+    ctx = _ssl_context()
     try:
         with socket.create_connection((host, 443), timeout=TIMEOUT) as sock:
             with ctx.wrap_socket(sock, server_hostname=host) as ssock:
@@ -81,8 +95,8 @@ def check_tls(host: str) -> dict:
                 not_after = cert.get("notAfter")
                 out["cert_expires"] = not_after
                 if not_after:
-                    exp = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z")
-                    out["days_until_expiry"] = (exp - datetime.utcnow()).days
+                    exp = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+                    out["days_until_expiry"] = (exp - datetime.now(timezone.utc)).days
                 out["issuer"] = dict(x[0] for x in cert.get("issuer", []))
     except (ssl.SSLCertVerificationError,) as e:
         out["cert_valid"] = False
