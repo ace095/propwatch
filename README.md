@@ -27,6 +27,7 @@ pip install -r requirements.txt   # optional but recommended
 ```bash
 python audit.py example.edu                 # prints JSON
 python audit.py example.edu --json out.json # also saves it
+python audit.py example.edu -v              # log every request to stderr
 ```
 
 ## Generate a report

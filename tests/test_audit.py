@@ -1,5 +1,6 @@
 """Offline tests: network is mocked, so they run anywhere."""
-import os, sys, unittest
+import os, sys, threading, unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -66,6 +67,60 @@ class RealFindingsStillReported(unittest.TestCase):
 
     def test_norm(self):
         self.assertEqual(audit._norm("https://Example.EDU/a/b"), "example.edu")
+
+
+class _RedirectServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/":
+            self.send_response(308)
+            self.send_header("Location", "/final")
+            self.end_headers()
+        else:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+    def log_message(self, *args):
+        pass
+
+
+class RedirectHandling(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = HTTPServer(("127.0.0.1", 0), _RedirectServer)
+        cls.url = f"http://127.0.0.1:{cls.server.server_port}/"
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def test_get_follows_redirects_by_default(self):
+        status, _, body = audit._get(self.url)
+        self.assertEqual((status, body), (200, "ok"))
+
+    def test_get_can_surface_the_redirect(self):
+        status, headers, _ = audit._get(self.url, follow_redirects=False)
+        self.assertEqual(status, 308)
+        self.assertEqual(headers["location"], "/final")
+
+    def test_http_redirect_check_does_not_follow(self):
+        with mock.patch.object(audit, "_get", return_value=(200, {}, "")) as spy:
+            audit.check_http_redirect("x.test")
+        self.assertIs(spy.call_args.kwargs["follow_redirects"], False)
+
+    def test_http_redirect_detects_https_location_on_308(self):
+        resp = (308, {"location": "https://x.test/"}, "")
+        with mock.patch.object(audit, "_get", return_value=resp):
+            self.assertTrue(audit.check_http_redirect("x.test")["redirects_to_https"])
+
+
+class Logging(unittest.TestCase):
+    def test_failed_fetch_is_logged(self):
+        with self.assertLogs("webaudit", level="WARNING") as cm:
+            audit._get("https://127.0.0.1:1/")
+        self.assertIn("failed", cm.output[0])
 
 
 if __name__ == "__main__":

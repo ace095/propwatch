@@ -23,12 +23,15 @@ import sys
 import ssl
 import json
 import socket
+import logging
 import argparse
 import subprocess
 from datetime import datetime, timezone
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request, HTTPRedirectHandler, build_opener, HTTPSHandler
 from urllib.error import URLError, HTTPError
+
+log = logging.getLogger("webaudit")
 
 USER_AGENT = "WebAuditBot/0.1 (passive compliance scan; contact: you@example.com)"
 TIMEOUT = 15
@@ -58,16 +61,29 @@ def _ssl_context() -> ssl.SSLContext:
         return ssl.create_default_context()
 
 
-def _get(url: str):
+class _NoRedirect(HTTPRedirectHandler):
+    """Surface 3xx responses instead of silently following them."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def _get(url: str, follow_redirects: bool = True):
     """Fetch a URL passively. Returns (status, headers_dict, body_text)."""
     req = Request(url, headers={"User-Agent": USER_AGENT})
+    handlers = [HTTPSHandler(context=_ssl_context())]
+    if not follow_redirects:
+        handlers.append(_NoRedirect())
     try:
-        with urlopen(req, timeout=TIMEOUT, context=_ssl_context()) as r:
+        with build_opener(*handlers).open(req, timeout=TIMEOUT) as r:
             body = r.read(500_000).decode("utf-8", "replace")
+            log.debug("GET %s -> %s", url, r.status)
             return r.status, {k.lower(): v for k, v in r.headers.items()}, body
     except HTTPError as e:
+        log.debug("GET %s -> %s", url, e.code)
         return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, ""
     except (URLError, socket.timeout, ssl.SSLError, ConnectionError) as e:
+        log.warning("GET %s failed: %s", url, e)
         return None, {"_error": str(e)}, ""
 
 
@@ -141,7 +157,7 @@ def check_headers(host: str) -> dict:
 
 def check_http_redirect(host: str) -> dict:
     """Does plain http:// redirect to https://?"""
-    status, headers, _ = _get(f"http://{host}/")
+    status, headers, _ = _get(f"http://{host}/", follow_redirects=False)
     if status is None:
         return {"_unavailable": f"Could not fetch http://{host}/ "
                                 f"({headers.get('_error', 'unknown error')})."}
@@ -259,7 +275,7 @@ def check_accessibility(host: str) -> dict:
 
 def run_audit(domain: str) -> dict:
     host = _norm(domain)
-    print(f"[*] Auditing {host} (passive) ...", file=sys.stderr)
+    log.info("Auditing %s (passive)", host)
     robots = check_robots(host)
     result = {
         "target": host,
@@ -280,14 +296,17 @@ def main():
     ap = argparse.ArgumentParser(description="Passive website compliance/security audit.")
     ap.add_argument("domain", help="e.g. example.edu")
     ap.add_argument("--json", metavar="FILE", help="write raw findings to a JSON file")
+    ap.add_argument("-v", "--verbose", action="store_true", help="log every request")
     args = ap.parse_args()
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
+                        format="%(levelname)s %(message)s", stream=sys.stderr)
 
     data = run_audit(args.domain)
     text = json.dumps(data, indent=2, default=str)
     if args.json:
         with open(args.json, "w") as f:
             f.write(text)
-        print(f"[*] Wrote {args.json}", file=sys.stderr)
+        log.info("Wrote %s", args.json)
     print(text)
 
 
