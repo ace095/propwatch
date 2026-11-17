@@ -20,7 +20,7 @@ import json
 import argparse
 import subprocess
 
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-sonnet-5-5"
 
 # Each agent sees only the finding keys listed, plus its own ruleset.
 AGENTS = {
@@ -96,12 +96,12 @@ def _client():
     return anthropic.Anthropic()
 
 
-def _ask(client, system, user, max_tokens=2000):
+def _ask(client, system, user, max_tokens=8000):
     msg = client.messages.create(
         model=MODEL, max_tokens=max_tokens, system=system,
         messages=[{"role": "user", "content": user}],
     )
-    return msg.content[0].text
+    return "".join(b.text for b in msg.content if b.type == "text")
 
 
 def collect(domain):
@@ -119,7 +119,7 @@ def report_single(client, sector, findings):
     user = (f"Sector: {sector}\nTarget: {findings.get('target')}\n\n"
             f"Raw passive-scan findings:\n{json.dumps(findings, indent=2)}\n\n"
             "Write the audit report.")
-    return _ask(client, system, user, max_tokens=3000)
+    return _ask(client, system, user, max_tokens=12000)
 
 
 def report_agents(client, sector, findings):
@@ -143,7 +143,7 @@ def report_agents(client, sector, findings):
     )
     merge_user = (f"Sector: {sector}\nTarget: {findings.get('target')}\n\n"
                   f"Specialist sections:\n\n{body}")
-    return _ask(client, merge_system, merge_user, max_tokens=3000)
+    return _ask(client, merge_system, merge_user, max_tokens=12000)
 
 
 def main():
