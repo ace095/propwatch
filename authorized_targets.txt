@@ -1,0 +1,14 @@
+# Sites this tool is allowed to scan. One domain per line.
+#
+# Add a client here only AFTER they have given written authorization.
+# A listed domain also covers its subdomains (badssl.com covers expired.badssl.com).
+# Anything not listed is refused before any request is sent.
+#
+# Public sites that exist for testing, safe to use:
+example.com
+owasp.org
+neverssl.com
+badssl.com
+httpbin.org
+
+# Clients (domain  # who authorized it and when):

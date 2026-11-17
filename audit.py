@@ -19,6 +19,7 @@ Optional (better results if installed): requests, beautifulsoup4, dnspython.
 The script degrades gracefully and tells you what it couldn't check.
 """
 
+import os
 import sys
 import ssl
 import json
@@ -305,10 +306,46 @@ def check_accessibility(host: str, home=None) -> dict:
         }
 
 
+# ---------- authorization ----------
+
+DEFAULT_ALLOWLIST = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "authorized_targets.txt")
+
+
+class TargetNotAuthorized(Exception):
+    pass
+
+
+def load_allowlist(path: str = None) -> list:
+    """Domains we may scan. Path: argument, else WEBAUDIT_ALLOWLIST, else the default file."""
+    path = path or os.environ.get("WEBAUDIT_ALLOWLIST") or DEFAULT_ALLOWLIST
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = [l.split("#", 1)[0].strip().lower() for l in f]
+    except FileNotFoundError:
+        log.warning("allowlist %s not found; no targets are authorized", path)
+        return []
+    return [l for l in lines if l]
+
+
+def is_authorized(host: str, allowlist: list) -> bool:
+    """True if host is a listed domain or a subdomain of one (never a look-alike)."""
+    host = host.lower().rstrip(".")
+    return any(host == d or host.endswith("." + d) for d in allowlist)
+
+
+def require_authorized(host: str, allowlist_path: str = None) -> None:
+    if not is_authorized(host, load_allowlist(allowlist_path)):
+        raise TargetNotAuthorized(
+            f"{host} is not in the authorized targets list. Add it to "
+            f"authorized_targets.txt once the owner has authorized the scan.")
+
+
 # ---------- orchestrator ----------
 
-def run_audit(domain: str) -> dict:
+def run_audit(domain: str, allowlist_path: str = None) -> dict:
     host = _norm(domain)
+    require_authorized(host, allowlist_path)
     log.info("Auditing %s (passive)", host)
     robots = check_robots(host)
     home = _fetch_home(host)
@@ -332,11 +369,17 @@ def main():
     ap.add_argument("domain", help="e.g. example.edu")
     ap.add_argument("--json", metavar="FILE", help="write raw findings to a JSON file")
     ap.add_argument("-v", "--verbose", action="store_true", help="log every request")
+    ap.add_argument("--allowlist", metavar="FILE",
+                    help="authorized targets file (default: authorized_targets.txt)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(levelname)s %(message)s", stream=sys.stderr)
 
-    data = run_audit(args.domain)
+    try:
+        data = run_audit(args.domain, args.allowlist)
+    except TargetNotAuthorized as e:
+        log.error("%s", e)
+        sys.exit(2)
     text = json.dumps(data, indent=2, default=str)
     if args.json:
         with open(args.json, "w", encoding="utf-8") as f:

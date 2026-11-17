@@ -23,6 +23,16 @@ python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt   # optional but recommended
 ```
 
+## Who you may scan
+The scanner only scans domains listed in `authorized_targets.txt` (a listed domain
+also covers its subdomains). Anything else is refused before any request is sent,
+with exit code 2. Add a client only after they have authorized the scan in writing,
+and note who and when on the same line:
+```
+client-school.edu   # signed by J. Smith, 2026-11-20
+```
+Use another file with `--allowlist FILE` or the `WEBAUDIT_ALLOWLIST` environment variable.
+
 ## Run a scan
 ```bash
 python audit.py example.edu                 # prints JSON
@@ -48,7 +58,7 @@ python pdf_export.py report.md report.pdf    # convert an existing markdown repo
 - Add axe-core/Pa11y (Node) for a real WCAG 2.1 AA audit
 - Split the single report prompt into Accessibility / Privacy / Security agents
 - Add a job queue + Postgres so you can scan many domains on a schedule
-- Allowlist of authorized targets baked into the crawler (rate limiting is done: 0.5s per host)
+- (done) Allowlist of authorized targets and per-host rate limiting
 
 ## Guardrails to keep
 - Respect robots.txt (already fetched)

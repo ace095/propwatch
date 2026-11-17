@@ -125,7 +125,10 @@ class HomepageFetchedOnce(unittest.TestCase):
             calls.append(url)
             return home if url == "https://x.test/" else (404, {}, "")
 
-        with mock.patch.object(audit, "_get", side_effect=fake_get),              mock.patch.object(audit, "check_tls", return_value={}),              mock.patch.object(audit, "check_email_auth", return_value={}):
+        with mock.patch.object(audit, "_get", side_effect=fake_get), \
+             mock.patch.object(audit, "load_allowlist", return_value=["x.test"]), \
+             mock.patch.object(audit, "check_tls", return_value={}), \
+             mock.patch.object(audit, "check_email_auth", return_value={}):
             audit.run_audit("x.test")
         self.assertEqual(calls.count("https://x.test/"), 1)
 
@@ -248,6 +251,65 @@ class PdfExport(unittest.TestCase):
                 report.main()
             with open(pdf, "rb") as f:
                 self.assertTrue(f.read().startswith(b"%PDF"))
+
+
+class TargetAllowlist(unittest.TestCase):
+    def write(self, text):
+        import tempfile
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        path = os.path.join(d.name, "allow.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def test_file_ignores_comments_and_blank_lines(self):
+        path = self.write("# header\n\nExample.COM  # client, signed 2026-01-01\n  \nowasp.org\n")
+        self.assertEqual(audit.load_allowlist(path), ["example.com", "owasp.org"])
+
+    def test_listed_domain_and_its_subdomains_match(self):
+        allow = ["badssl.com"]
+        self.assertTrue(audit.is_authorized("badssl.com", allow))
+        self.assertTrue(audit.is_authorized("expired.badssl.com", allow))
+        self.assertTrue(audit.is_authorized("BADSSL.com.", allow))
+
+    def test_lookalike_domains_do_not_match(self):
+        allow = ["example.com"]
+        for host in ("evilexample.com", "example.com.evil.test", "example.org", "com"):
+            with self.subTest(host=host):
+                self.assertFalse(audit.is_authorized(host, allow))
+
+    def test_unlisted_target_is_refused_before_any_request(self):
+        path = self.write("example.com\n")
+        with mock.patch.object(audit, "_get") as get, \
+             mock.patch.object(audit.socket, "create_connection") as conn:
+            with self.assertRaises(audit.TargetNotAuthorized):
+                audit.run_audit("https://stranger.test/page", path)
+        get.assert_not_called()
+        conn.assert_not_called()
+
+    def test_missing_allowlist_authorizes_nothing(self):
+        self.assertEqual(audit.load_allowlist(os.path.join("nope", "missing.txt")), [])
+
+    def test_env_var_selects_the_allowlist(self):
+        path = self.write("env.test\n")
+        with mock.patch.dict(os.environ, {"WEBAUDIT_ALLOWLIST": path}):
+            self.assertEqual(audit.load_allowlist(), ["env.test"])
+
+    def test_cli_exits_2_for_unauthorized_target(self):
+        path = self.write("example.com\n")
+        argv = ["audit.py", "stranger.test", "--allowlist", path]
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(audit, "_get") as get:
+            with self.assertRaises(SystemExit) as cm:
+                audit.main()
+        self.assertEqual(cm.exception.code, 2)
+        get.assert_not_called()
+
+    def test_shipped_allowlist_covers_the_live_test_sites(self):
+        allow = audit.load_allowlist()
+        for host in ("example.com", "owasp.org", "neverssl.com", "expired.badssl.com"):
+            self.assertTrue(audit.is_authorized(host, allow), host)
 
 
 class Logging(unittest.TestCase):
