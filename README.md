@@ -47,7 +47,7 @@ python report.py example.edu --sector "K-12 public school" --single
 - Split the single report prompt into Accessibility / Privacy / Security agents
 - Add a job queue + Postgres so you can scan many domains on a schedule
 - PDF export of the report
-- Rate limiting + allowlist baked into the crawler
+- Allowlist of authorized targets baked into the crawler (rate limiting is done: 0.5s per host)
 
 ## Guardrails to keep
 - Respect robots.txt (already fetched)

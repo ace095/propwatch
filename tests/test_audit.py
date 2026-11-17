@@ -181,6 +181,24 @@ class ReportOutputEncoding(unittest.TestCase):
                 self.assertEqual(f.read(), "HTTP → HTTPS")
 
 
+class RateLimit(unittest.TestCase):
+    def setUp(self):
+        audit._last_request.clear()
+
+    def test_second_request_to_same_host_waits(self):
+        with mock.patch.object(audit.time, "sleep") as sleep:
+            audit._throttle("a.test")
+            audit._throttle("a.test")
+        sleep.assert_called_once()
+        self.assertLessEqual(sleep.call_args.args[0], audit.MIN_REQUEST_INTERVAL)
+
+    def test_different_hosts_do_not_wait(self):
+        with mock.patch.object(audit.time, "sleep") as sleep:
+            audit._throttle("a.test")
+            audit._throttle("b.test")
+        sleep.assert_not_called()
+
+
 class Logging(unittest.TestCase):
     def test_failed_fetch_is_logged(self):
         with self.assertLogs("webaudit", level="WARNING") as cm:

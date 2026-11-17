@@ -23,6 +23,7 @@ import sys
 import ssl
 import json
 import socket
+import time
 import logging
 import http.client
 import argparse
@@ -36,6 +37,8 @@ log = logging.getLogger("webaudit")
 
 USER_AGENT = "WebAuditBot/0.1 (passive compliance scan; contact: you@example.com)"
 TIMEOUT = 15
+MIN_REQUEST_INTERVAL = 0.5  # seconds between requests to one host
+_last_request: dict = {}
 
 
 # ---------- helpers ----------
@@ -69,6 +72,14 @@ class _NoRedirect(HTTPRedirectHandler):
         return None
 
 
+def _throttle(host: str) -> None:
+    wait = _last_request.get(host, 0) + MIN_REQUEST_INTERVAL - time.monotonic()
+    if wait > 0:
+        log.debug("rate limit: waiting %.2fs for %s", wait, host)
+        time.sleep(wait)
+    _last_request[host] = time.monotonic()
+
+
 def _get(url: str, follow_redirects: bool = True, retries: int = 1):
     """Fetch a URL passively. Returns (status, headers_dict, body_text)."""
     req = Request(url, headers={"User-Agent": USER_AGENT})
@@ -76,6 +87,7 @@ def _get(url: str, follow_redirects: bool = True, retries: int = 1):
     if not follow_redirects:
         handlers.append(_NoRedirect())
     for attempt in range(retries + 1):
+        _throttle(urlparse(url).netloc)
         try:
             with build_opener(*handlers).open(req, timeout=TIMEOUT) as r:
                 body = r.read(500_000).decode("utf-8", "replace")
