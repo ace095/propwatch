@@ -30,7 +30,10 @@ python audit.py example.edu --json out.json # also saves it
 ```
 
 ## Generate a report
-See `report_prompt.md` — paste the JSON into the one Claude call. That's the MVP.
+```bash
+cp .env.example .env   # then paste your key from https://platform.claude.com/settings/keys
+python report.py example.edu --sector "K-12 public school" --single
+```
 
 ## The business flow this supports
 1. Passive scan (free) → findings
