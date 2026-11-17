@@ -6,3 +6,7 @@ certifi             # complete CA list so valid HTTPS sites verify (esp. on Wind
 
 # For the report step:
 anthropic           # Claude API client
+
+# For PDF export:
+fpdf2               # writes the PDF
+markdown            # report markdown -> HTML

@@ -19,8 +19,8 @@ The scan found no Critical issues. The main gaps are in **privacy compliance** a
 | 1 | No privacy policy page located; no cookie consent indicator | **High** | CCPA / GDPR, state privacy laws |
 | 2 | 3 of 8 images lack alternative text | **Medium** | ADA / WCAG 2.1 AA |
 | 3 | Content Security Policy allows `'unsafe-inline'` scripts | **Medium** | State breach laws, GDPR (data protection) |
-| 4 | DMARC set to "quarantine," not "reject"; DKIM not verified | **Low–Medium** | State breach laws (phishing risk) |
-| 5 | Third-party embeds and services may share visitor data | **Low–Medium** | CCPA / GDPR |
+| 4 | DMARC set to "quarantine," not "reject"; DKIM not verified | **Lowâ€“Medium** | State breach laws (phishing risk) |
+| 5 | Third-party embeds and services may share visitor data | **Lowâ€“Medium** | CCPA / GDPR |
 | 6 | `robots.txt` lists sensitive-sounding paths | **Low** | General security hygiene |
 | 7 | Technology stack disclosed (Next.js, Vercel) | **Low** | General security hygiene |
 | 8 | Certificate expires in 83 days | **Low (informational)** | General availability / trust |
@@ -56,7 +56,7 @@ The scan found no Critical issues. The main gaps are in **privacy compliance** a
 
 **Remediation:** Move to nonce-based or hash-based script allowances, which Next.js supports, and remove `'unsafe-inline'` from `script-src`. Test in report-only mode first. The site already has a CSP report endpoint (`/api/csp-report`), which will help.
 
-### 4. DMARC "quarantine" policy; DKIM not verified: **Low–Medium**
+### 4. DMARC "quarantine" policy; DKIM not verified: **Lowâ€“Medium**
 **What we saw:**
 - SPF is present and strict (`-all`), authorizing Google, Mailchimp, and Amazon SES.
 - DMARC is present with reporting enabled, but its policy is `quarantine`, not the strongest setting, `reject`.
@@ -68,7 +68,7 @@ The scan found no Critical issues. The main gaps are in **privacy compliance** a
 
 **Remediation:** Have your mail administrator verify DKIM for every sending service. After reviewing the DMARC reports for legitimate mail being flagged, move the policy to `p=reject`.
 
-### 5. Third-party services and embeds: **Low–Medium**
+### 5. Third-party services and embeds: **Lowâ€“Medium**
 **What we saw:** The site's policy allows connections to Supabase (data and real-time connections), YouTube (including the privacy-enhanced `youtube-nocookie` domain), Vimeo, Google Calendar, Google accounts, Unsplash, and others.
 
 **Why it matters:** Embedded third-party content can transmit visitor IP addresses and set cookies. The scan did not examine what is actually loaded or which cookies are set.

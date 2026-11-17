@@ -199,6 +199,57 @@ class RateLimit(unittest.TestCase):
         sleep.assert_not_called()
 
 
+class PdfExport(unittest.TestCase):
+    MD = chr(10).join([
+        "# Audit Report",
+        "",
+        "A → B — “quoted” ✅",
+        "",
+        "| Item | Count |",
+        "|---|---|",
+        "| `code` cell | 1 |",
+        "",
+        "- one",
+        "- two",
+    ])
+
+    def render(self, md):
+        import tempfile, pdf_export
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "r.pdf")
+            pdf_export.markdown_to_pdf(md, out)
+            with open(out, "rb") as f:
+                return f.read()
+
+    def test_produces_a_pdf_from_unicode_markdown_with_tables(self):
+        data = self.render(self.MD)
+        self.assertTrue(data.startswith(b"%PDF"))
+        self.assertGreater(len(data), 1000)
+
+    def test_every_sample_report_converts(self):
+        import glob
+        samples = glob.glob(os.path.join(os.path.dirname(__file__), "..",
+                                         "sample_reports", "*.md"))
+        self.assertTrue(samples)
+        for path in samples:
+            with self.subTest(path=os.path.basename(path)), open(path, encoding="utf-8") as f:
+                self.assertTrue(self.render(f.read()).startswith(b"%PDF"))
+
+    def test_report_cli_writes_pdf_flag(self):
+        import json, tempfile, report
+        with tempfile.TemporaryDirectory() as d:
+            findings, pdf = os.path.join(d, "f.json"), os.path.join(d, "r.pdf")
+            with open(findings, "w", encoding="utf-8") as f:
+                json.dump({"target": "x.test"}, f)
+            argv = ["report.py", "--json", findings, "--single", "--pdf", pdf]
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(report, "_client"), \
+                 mock.patch.object(report, "report_single", return_value="# Title text"):
+                report.main()
+            with open(pdf, "rb") as f:
+                self.assertTrue(f.read().startswith(b"%PDF"))
+
+
 class Logging(unittest.TestCase):
     def test_failed_fetch_is_logged(self):
         with self.assertLogs("webaudit", level="WARNING") as cm:

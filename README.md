@@ -34,6 +34,8 @@ python audit.py example.edu -v              # log every request to stderr
 ```bash
 cp .env.example .env   # then paste your key from https://platform.claude.com/settings/keys
 python report.py example.edu --sector "K-12 public school" --single
+python report.py example.edu --sector "K-12 public school" --single --pdf report.pdf
+python pdf_export.py report.md report.pdf    # convert an existing markdown report
 ```
 
 ## The business flow this supports
@@ -46,7 +48,6 @@ python report.py example.edu --sector "K-12 public school" --single
 - Add axe-core/Pa11y (Node) for a real WCAG 2.1 AA audit
 - Split the single report prompt into Accessibility / Privacy / Security agents
 - Add a job queue + Postgres so you can scan many domains on a schedule
-- PDF export of the report
 - Allowlist of authorized targets baked into the crawler (rate limiting is done: 0.5s per host)
 
 ## Guardrails to keep

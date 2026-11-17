@@ -154,6 +154,7 @@ def main():
     ap.add_argument("--sector", default="organization", help='e.g. "K-12 public school"')
     ap.add_argument("--single", action="store_true", help="one call instead of agents")
     ap.add_argument("--out", metavar="FILE", help="write the report to a file")
+    ap.add_argument("--pdf", metavar="FILE", help="also write the report as a PDF")
     args = ap.parse_args()
 
     if hasattr(sys.stdout, "reconfigure"):
@@ -168,6 +169,9 @@ def main():
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(report)
         print(f"[*] Wrote {args.out}", file=sys.stderr)
+    if args.pdf:
+        from pdf_export import markdown_to_pdf
+        markdown_to_pdf(report, args.pdf)
     print(report)
 
 
