@@ -24,6 +24,7 @@ import ssl
 import json
 import socket
 import logging
+import http.client
 import argparse
 import subprocess
 from datetime import datetime, timezone
@@ -68,23 +69,28 @@ class _NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def _get(url: str, follow_redirects: bool = True):
+def _get(url: str, follow_redirects: bool = True, retries: int = 1):
     """Fetch a URL passively. Returns (status, headers_dict, body_text)."""
     req = Request(url, headers={"User-Agent": USER_AGENT})
     handlers = [HTTPSHandler(context=_ssl_context())]
     if not follow_redirects:
         handlers.append(_NoRedirect())
-    try:
-        with build_opener(*handlers).open(req, timeout=TIMEOUT) as r:
-            body = r.read(500_000).decode("utf-8", "replace")
-            log.debug("GET %s -> %s", url, r.status)
-            return r.status, {k.lower(): v for k, v in r.headers.items()}, body
-    except HTTPError as e:
-        log.debug("GET %s -> %s", url, e.code)
-        return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, ""
-    except (URLError, socket.timeout, ssl.SSLError, ConnectionError) as e:
-        log.warning("GET %s failed: %s", url, e)
-        return None, {"_error": str(e)}, ""
+    for attempt in range(retries + 1):
+        try:
+            with build_opener(*handlers).open(req, timeout=TIMEOUT) as r:
+                body = r.read(500_000).decode("utf-8", "replace")
+                log.debug("GET %s -> %s", url, r.status)
+                return r.status, {k.lower(): v for k, v in r.headers.items()}, body
+        except HTTPError as e:
+            log.debug("GET %s -> %s", url, e.code)
+            return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, ""
+        except (URLError, socket.timeout, ssl.SSLError, ConnectionError, http.client.HTTPException) as e:
+            transient = not isinstance(getattr(e, "reason", e), ssl.SSLCertVerificationError)
+            if transient and attempt < retries:
+                log.info("GET %s failed (%s); retrying", url, e)
+                continue
+            log.warning("GET %s failed: %s", url, e)
+            return None, {"_error": str(e)}, ""
 
 
 # ---------- collector: robots.txt (be polite) ----------
@@ -98,6 +104,16 @@ def check_robots(host: str) -> dict:
 
 
 # ---------- collector: TLS / SSL ----------
+
+CERT_PROBLEMS = {
+    10: "expired",
+    18: "self_signed",
+    19: "self_signed_in_chain",
+    20: "untrusted_issuer",
+    21: "untrusted_issuer",
+    62: "hostname_mismatch",
+}
+
 
 def check_tls(host: str) -> dict:
     out = {"reachable": False}
@@ -116,7 +132,9 @@ def check_tls(host: str) -> dict:
                 out["issuer"] = dict(x[0] for x in cert.get("issuer", []))
     except (ssl.SSLCertVerificationError,) as e:
         out["cert_valid"] = False
+        out["cert_problem"] = CERT_PROBLEMS.get(e.verify_code, "invalid")
         out["error"] = str(e)
+        log.info("%s: certificate rejected (%s)", host, out["cert_problem"])
     except (socket.timeout, ConnectionError, socket.gaierror, OSError) as e:
         out["error"] = str(e)
     return out

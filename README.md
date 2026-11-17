@@ -56,5 +56,10 @@ python report.py example.edu --sector "K-12 public school" --single
 
 ## Tests
 ```bash
-python -m unittest discover -s tests -v   # offline, no network needed
+python -m unittest tests.test_audit -v   # offline: network is mocked, runs anywhere (seconds)
+python -m unittest tests.test_live -v    # live: scans real test sites (about 2 minutes)
+WEBAUDIT_LOG=1 python -m unittest tests.test_live -v   # same, with every request logged
 ```
+Live tests only scan sites that are public and meant for testing: `badssl.com`
+(deliberately broken certificates), `example.com`, `owasp.org` and `neverssl.com`.
+They skip instead of failing when there is no network. Passive requests only.

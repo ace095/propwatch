@@ -1,5 +1,5 @@
 """Offline tests: network is mocked, so they run anywhere."""
-import os, sys, threading, unittest
+import os, socket, ssl, sys, threading, unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest import mock
 
@@ -128,6 +128,43 @@ class HomepageFetchedOnce(unittest.TestCase):
         with mock.patch.object(audit, "_get", side_effect=fake_get),              mock.patch.object(audit, "check_tls", return_value={}),              mock.patch.object(audit, "check_email_auth", return_value={}):
             audit.run_audit("x.test")
         self.assertEqual(calls.count("https://x.test/"), 1)
+
+
+class CertificateProblems(unittest.TestCase):
+    def classify(self, code):
+        err = ssl.SSLCertVerificationError(1, "verify failed")
+        err.verify_code = code
+        with mock.patch.object(audit.socket, "create_connection", side_effect=err):
+            return audit.check_tls("x.test")
+
+    def test_known_codes_are_named(self):
+        for code, name in {10: "expired", 18: "self_signed", 20: "untrusted_issuer",
+                           62: "hostname_mismatch"}.items():
+            with self.subTest(code=code):
+                r = self.classify(code)
+                self.assertEqual(r["cert_problem"], name)
+                self.assertFalse(r["cert_valid"])
+
+    def test_unknown_code_is_generic(self):
+        self.assertEqual(self.classify(999)["cert_problem"], "invalid")
+
+
+class RetryOnTransientFailure(unittest.TestCase):
+    def test_retries_once_then_reports_failure(self):
+        opener = mock.Mock()
+        opener.open.side_effect = socket.timeout("slow")
+        with mock.patch.object(audit, "build_opener", return_value=opener):
+            status, headers, _ = audit._get("http://x.test/")
+        self.assertIsNone(status)
+        self.assertEqual(opener.open.call_count, 2)
+
+    def test_certificate_errors_are_not_retried(self):
+        from urllib.error import URLError
+        opener = mock.Mock()
+        opener.open.side_effect = URLError(ssl.SSLCertVerificationError(1, "bad"))
+        with mock.patch.object(audit, "build_opener", return_value=opener):
+            audit._get("https://x.test/")
+        self.assertEqual(opener.open.call_count, 1)
 
 
 class Logging(unittest.TestCase):
