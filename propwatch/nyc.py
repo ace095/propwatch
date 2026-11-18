@@ -22,6 +22,8 @@ import sys
 import json
 import argparse
 import urllib.parse
+import time
+import urllib.error
 import urllib.request
 from datetime import date, timedelta
 
@@ -31,10 +33,16 @@ BORO_NAMES = {"1": "MANHATTAN", "2": "BRONX", "3": "BROOKLYN", "4": "QUEENS",
               "5": "STATEN ISLAND"}
 
 
-def _get(url: str):
-    req = Request_(url)
-    with urllib.request.urlopen(req, timeout=40) as r:
-        return json.load(r)
+def _get(url: str, tries: int = 4):
+    """GET JSON, retrying transient network errors (the city API and proxies drop connections)."""
+    for attempt in range(tries):
+        try:
+            with urllib.request.urlopen(Request_(url), timeout=120) as r:
+                return json.load(r)
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            if attempt == tries - 1:
+                raise
+            time.sleep(2 ** attempt)
 
 
 def Request_(url):

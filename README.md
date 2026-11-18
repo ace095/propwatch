@@ -43,6 +43,18 @@ over a year, and the buildings with the most. Counts are raw, not per
 resident, and "open" means not yet closed in the city's records (some very old
 open records may reflect record-keeping, not current conditions).
 
+## Monthly report (all five boroughs)
+```bash
+python -m propwatch monthly
+```
+Takes a citywide snapshot of open housing violations per zip, saves it to
+`snapshots/YYYY-MM.json`, ranks zips by open hazardous violations per building,
+and shows change since last month. Takes about 1-2 minutes.
+
+`.github/workflows/monthly.yml` runs it on the 2nd of each month and commits
+the snapshot. GitHub only runs scheduled workflows from the **default branch**,
+so it starts working once this is merged into `main`.
+
 ## Limits (be honest about these)
 - Needs a street address with a tax lot; intersections will not resolve.
 - 311 matches by address text, so unusual spellings can miss.
