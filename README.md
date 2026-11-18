@@ -31,6 +31,18 @@ lower-income neighborhoods. The data is public but scattered across agencies.
 Propwatch puts it in one place so owners, tenants and communities can see it,
 and see what has gone unfixed for years.
 
+## Neighborhood view
+Which zip codes carry the most unresolved hazardous housing violations, and
+for how long?
+```bash
+python -m propwatch area 10452
+python -m propwatch area 10452 10021     # side by side
+```
+Shows open violations, hazardous (Class B/C) counts, how many have been open
+over a year, and the buildings with the most. Counts are raw, not per
+resident, and "open" means not yet closed in the city's records (some very old
+open records may reflect record-keeping, not current conditions).
+
 ## Limits (be honest about these)
 - Needs a street address with a tax lot; intersections will not resolve.
 - 311 matches by address text, so unusual spellings can miss.
@@ -39,7 +51,7 @@ and see what has gone unfixed for years.
 - Not yet checked against the city's own lookup tools for accuracy.
 
 ## Roadmap
-1. Neighborhood view: rank zip codes / blocks by open hazardous violations and how long they have sat unfixed
+1. Rank by rate (per building / per resident) and add a map; check old "open" records for staleness
 2. Watch list + "what's new since last week"
 3. Claude-written plain-English next steps per violation
 4. Email digest
