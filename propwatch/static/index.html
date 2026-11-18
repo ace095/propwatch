@@ -1,0 +1,245 @@
+<title>Propwatch</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column, a tab bar, civic-records feel: plain paper, mono for IDs and counts. */
+:root{
+  --bg:#f6f6f3; --surface:#ffffff; --fg:#1b1f23; --muted:#5d656d; --line:#dcdcd6;
+  --accent:#1f4e79; --accent-fg:#ffffff;
+  --cA:#c9a227; --cB:#d9731a; --cC:#b3261e; --ok:#2f7d4f;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#13161a; --surface:#1b2026; --fg:#e8eaec; --muted:#9aa3ab; --line:#2f363d;
+  --accent:#7db3e6; --accent-fg:#0d1720; --cA:#e0bf45; --cB:#f0903f; --cC:#ff6b5f; --ok:#5cc08a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#13161a; --surface:#1b2026; --fg:#e8eaec; --muted:#9aa3ab; --line:#2f363d;
+  --accent:#7db3e6; --accent-fg:#0d1720; --cA:#e0bf45; --cB:#f0903f; --cC:#ff6b5f; --ok:#5cc08a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans);margin:0;
+  padding-block:20px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:860px;margin:0 auto}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.brand{font-weight:600;font-size:22px;letter-spacing:-.01em}
+.brand span{color:var(--accent)}
+.tag{color:var(--muted);font-size:13px}
+nav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:14px 0 22px;overflow-x:auto}
+nav button{font:inherit;font-weight:500;background:none;border:0;color:var(--muted);padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+nav button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h2{font-size:19px;margin:0 0 4px;letter-spacing:-.005em}
+h3{font-size:15px;margin:0 0 6px}
+p{margin:0 0 12px}
+.sub{color:var(--muted);margin-bottom:16px}
+.search{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.search input{flex:1 1 260px;min-width:0;font:inherit;padding:11px 12px;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:6px}
+.btn{font:inherit;font-weight:600;background:var(--accent);color:var(--accent-fg);border:0;border-radius:6px;padding:11px 18px;cursor:pointer}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.chip{font:inherit;font-size:13px;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
+.chip:hover{border-color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px}
+.addr{font-weight:600;font-size:18px}
+.ids{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:14px}
+.say{font-size:16px;margin:14px 0 16px}
+.bar{display:flex;height:14px;border-radius:3px;overflow:hidden;background:var(--line);margin:6px 0 6px}
+.bar i{display:block;height:100%}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-bottom:16px}
+.legend b{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+dl.rows{margin:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0}
+dl.rows dt,dl.rows dd{margin:0;padding:9px 0;border-top:1px solid var(--line)}
+dl.rows dd{font-family:var(--mono);font-size:14px;text-align:right;padding-left:12px}
+dl.rows dt small{display:block;color:var(--muted);font-size:12.5px}
+.zero{color:var(--ok)}
+.fine{font-size:12.5px;color:var(--muted);margin-top:14px}
+.cmd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--bg);border:1px dashed var(--line);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
+.cmd button{margin-left:auto;font:inherit;font-size:12px;background:none;border:1px solid var(--line);color:var(--fg);border-radius:4px;padding:3px 9px;cursor:pointer}
+.note{border-left:3px solid var(--cA);background:var(--surface);padding:10px 14px;border-radius:0 6px 6px 0;margin:14px 0;font-size:14px}
+/* neighborhoods */
+.zrow{display:grid;grid-template-columns:54px minmax(0,1fr) 64px;gap:10px;align-items:center;padding:6px 0;font-size:14px}
+.zrow .z{font-family:var(--mono)}
+.zrow .track{background:var(--line);height:18px;border-radius:3px;overflow:hidden}
+.zrow .track i{display:block;height:100%;background:var(--cC)}
+.zrow.low .track i{background:var(--ok)}
+.zrow .v{font-family:var(--mono);text-align:right}
+.tbl{overflow-x:auto;margin-top:6px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:520px}
+th,td{padding:8px 10px;border-top:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left;font-family:var(--mono)}
+th{color:var(--muted);font-weight:500;font-size:12.5px}
+.gap{margin-top:22px}
+/* pitch */
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0 22px}
+.flow .card b{display:block;font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:4px}
+.cust{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}
+.cust .card{display:flex;flex-direction:column;gap:6px}
+.pill{align-self:flex-start;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.oneliner{font-size:18px;line-height:1.4;font-weight:500;margin:10px 0 4px}
+ul{padding-left:20px;margin:6px 0 12px}
+li{margin:4px 0}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:no-preference){.bar i,.zrow .track i{transition:width .4s ease}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="brand">Prop<span>watch</span></div>
+  <div class="tag">What New York City has on record for a property, in plain English</div>
+</header>
+<nav role="tablist" aria-label="Sections">
+  <button role="tab" id="t-look" aria-selected="true" data-tab="look">Look up an address</button>
+  <button role="tab" id="t-area" aria-selected="false" data-tab="area">Neighborhoods</button>
+  <button role="tab" id="t-pitch" aria-selected="false" data-tab="pitch">The pitch</button>
+</nav>
+
+<section id="look">
+  <h2>Look up an address</h2>
+  <p class="sub">Type any address in the five boroughs. Results come live from the city's public records.</p>
+  <form class="search" id="form">
+    <input id="q" type="text" autocomplete="off" placeholder="22 Stagg Street, Brooklyn" aria-label="NYC address">
+    <button class="btn" type="submit">Check records</button>
+  </form>
+  <div class="chips" id="chips"></div>
+  <div id="result"></div>
+</section>
+
+<section id="area" hidden>
+  <h2>Where problems sit unfixed</h2>
+  <p class="sub">Open hazardous housing violations (Class B and C) per building, by zip code. Snapshot taken <span id="snapdate"></span>.</p>
+  <form class="search" id="zform"><input id="zq" inputmode="numeric" maxlength="5" placeholder="Check a zip code, e.g. 10452" aria-label="Zip code"><button class="btn" type="submit">Check zip</button></form>
+  <div id="zresult"></div>
+  <div id="bars"></div>
+  <div class="note"><b>Read this carefully.</b> These are raw counts of what is open in city records, not per resident. A very old open record can reflect paperwork that never got closed. Zips with fewer than 50 buildings are left out.</div>
+  <div class="tbl"><table id="ztable"></table></div>
+  <p class="fine" id="citywide"></p>
+</section>
+
+<section id="pitch" hidden>
+  <h2>What this is, and who pays</h2>
+  <p class="oneliner">The city already publishes every violation. Propwatch reads all of it for you, tells you what it means, and warns you before a fine grows.</p>
+  <p class="sub">The data is free and scattered across five city systems. The product is putting it in one place and watching it for you.</p>
+
+  <h3>How it works</h3>
+  <div class="flow">
+    <div class="card"><b>1 · ADDRESS</b>Someone types an address. NYC Planning's free lookup turns it into the property's tax-lot and building IDs.</div>
+    <div class="card"><b>2 · RECORDS</b>Six public datasets are asked about that ID: housing, buildings, penalties, complaints, 311.</div>
+    <div class="card"><b>3 · SUMMARY</b>One plain-English page: what's open, how hazardous, what's owed. Every month it checks again and tells you what changed.</div>
+  </div>
+
+  <h3>Who would pay</h3>
+  <div class="cust">
+    <div class="card"><span class="pill">Best first bet</span><h3>Owners, co-op boards, property managers</h3>
+      <p>Pain: violations and filing deadlines get missed, and fines grow. Offer: monthly watch on your buildings with a plain-English "what's new and what to do".</p>
+      <p class="fine">Guess to test: roughly $20–50 a month per building or portfolio.</p></div>
+    <div class="card"><span class="pill">Second</span><h3>Buyers, brokers, lenders, insurers</h3>
+      <p>Pain: surprises found after closing. Offer: a records report on any address before a deal.</p>
+      <p class="fine">Guess to test: a per-report fee. Crowded; others sell property reports.</p></div>
+    <div class="card"><span class="pill">Mission</span><h3>Tenant groups, journalists, council offices</h3>
+      <p>Pain: neglect is hard to see across a neighborhood. Offer: the neighborhood view, free. Builds trust and attention.</p>
+      <p class="fine">Little budget, so grants or sponsorship, not sales.</p></div>
+  </div>
+
+  <div class="note"><b>Not proven yet.</b> No one has said they'd pay. Other free tools already show this data to tenants. Before building more, ask 5 small landlords or co-op board members: how do you find out about violations today, what has it cost you, and would you pay to hear sooner?</div>
+  <p class="fine">Propwatch reports what is on record. It never says a building is safe, and it is not a substitute for a licensed inspector.</p>
+</section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const fmt = n => n.toLocaleString("en-US");
+const EXAMPLES = ["22 Stagg Street, Brooklyn", "350 5th Avenue, Manhattan", "1177 Walton Avenue, Bronx"];
+const nameOf = a => a.address.replace(", NY, USA", "");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  ["look","area","pitch"].forEach(id => $("#"+id).hidden = id !== b.dataset.tab);
+}));
+
+async function api(path) {
+  const r = await fetch(path);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || "Request failed");
+  return j;
+}
+
+const chips = $("#chips");
+EXAMPLES.forEach(a => {
+  const c = document.createElement("button"); c.type = "button"; c.className = "chip";
+  c.textContent = a.replace(/, (Brooklyn|Manhattan|Bronx|Queens|Staten Island)$/, "");
+  c.addEventListener("click", () => { $("#q").value = a; lookup(a); });
+  chips.appendChild(c);
+});
+
+function bar(c) {
+  const parts = [["C","var(--cC)","Class C, immediately hazardous"],["B","var(--cB)","Class B, hazardous"],["A","var(--cA)","Class A, non-hazardous"]];
+  const tot = (c.C||0)+(c.B||0)+(c.A||0);
+  if (!tot) return "";
+  return `<div class="bar" role="img" aria-label="Open housing violations by class">` +
+    parts.map(([k,col]) => `<i style="width:${(c[k]||0)/tot*100}%;background:${col}"></i>`).join("") + `</div><div class="legend">` +
+    parts.map(([k,col,t]) => `<span><b style="background:${col}"></b>${fmt(c[k]||0)} ${t}</span>`).join("") + `</div>`;
+}
+const row = (t, sub, v, zg) => `<dt>${t}${sub ? `<small>${sub}</small>` : ""}</dt><dd class="${zg && v === 0 ? "zero" : ""}">${typeof v === "number" ? fmt(v) : v}</dd>`;
+
+function say(a) {
+  const h = a.hpd, dob = a.dob.active_older_system + a.dob.active_dob_now, c = h.open_by_class.C || 0, bits = [];
+  if (h.open) bits.push(`<b>${fmt(h.open)} open housing violations</b>` + (c ? `, ${fmt(c)} of them Class C (immediately hazardous)` : "") + (h.oldest_open_issued ? `. The oldest was issued ${h.oldest_open_issued}` : ""));
+  if (dob) bits.push(`<b>${fmt(dob)} active building-department violation${dob>1?"s":""}</b>`);
+  if (a.ecb_penalties.balance_due) bits.push(`<b>$${fmt(Math.round(a.ecb_penalties.balance_due))} in penalties owed</b>`);
+  return bits.length ? bits.join(". ") + "." : "Nothing open on record in these datasets.";
+}
+
+function show(a) {
+  const h = a.hpd, d = a.dob, e = a.ecb_penalties, c = a.complaints_311_last_year, dobN = d.active_older_system + d.active_dob_now;
+  const none = !h.open && !dobN;
+  $("#result").innerHTML = `<div class="card"><div class="addr">${esc(nameOf(a))}</div>
+    <div class="ids">BBL ${esc(a.bbl)} · BIN ${esc(a.bin)}</div><p class="say">${say(a)}</p>${bar(h.open_by_class)}
+    <dl class="rows">
+      ${row("Housing violations open","HPD, mostly multi-unit rentals",h.open,true)}
+      ${row("Building violations active","Department of Buildings, old and new systems",dobN,true)}
+      ${row("Penalties active",`$${fmt(e.balance_due)} balance due`,e.active,true)}
+      ${row("Building complaints active","Department of Buildings",a.dob_complaints_active,true)}
+      ${row("311 requests, last 12 months",`${fmt(c.still_open)} still open`,c.total,false)}
+    </dl>
+    ${h.examples.length ? `<p class="fine"><b>Example on record:</b> Class ${esc(h.examples[0].class)}, issued ${esc(h.examples[0].issued)}: ${esc(h.examples[0].text.toLowerCase())}…</p>` : ""}
+    ${none ? `<p class="fine">No housing records is normal for many 1-2 family homes. Nothing on record is not proof of good condition.</p>` : ""}
+    <p class="fine">This shows what is on record. It does not say whether the building is safe.</p></div>`;
+}
+
+async function lookup(text) {
+  $("#result").innerHTML = `<div class="card"><p class="fine">Checking six city datasets… this takes a few seconds.</p></div>`;
+  try { show(await api("/api/lookup?address=" + encodeURIComponent(text))); }
+  catch (e) { $("#result").innerHTML = `<div class="card"><h3>Couldn't check that address</h3><p>${esc(e.message)}</p></div>`; }
+}
+$("#form").addEventListener("submit", ev => { ev.preventDefault(); const t = $("#q").value.trim(); if (t) lookup(t); });
+
+const haz = z => z.B + z.C, per = z => haz(z) / z.buildings;
+function zipCard(z) {
+  const c = z.open_by_class;
+  $("#zresult").innerHTML = `<div class="card gap"><div class="addr">ZIP ${esc(z.zip)}</div>
+    <p class="say"><b>${fmt(z.open_total)} open housing violations</b> in ${fmt(z.buildings_with_open)} buildings (about ${z.avg_open_per_building} each). ${fmt(z.open_hazardous)} are hazardous, ${fmt(c.C||0)} are Class C, and ${fmt(z.hazardous_over_1yr)} hazardous ones have been open over a year.</p>
+    ${z.worst_buildings.length ? `<p class="fine"><b>Most open hazardous violations:</b> ${z.worst_buildings.slice(0,3).map(w => esc(w.address)+" ("+fmt(w.n)+")").join("; ")}</p>` : ""}
+    <p class="fine">Raw counts, not per resident. Open means not yet closed in city records.</p></div>`;
+}
+$("#zform").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const z = $("#zq").value.trim();
+  $("#zresult").innerHTML = `<div class="card gap"><p class="fine">Checking zip ${esc(z)}…</p></div>`;
+  try { zipCard(await api("/api/area?zip=" + encodeURIComponent(z))); }
+  catch (e) { $("#zresult").innerHTML = `<div class="card gap"><p>${esc(e.message)}</p></div>`; }
+});
+
+(async () => {
+  try {
+    const Z = await api("/api/snapshot");
+    const rowsAll = [...Z.top.map(z => ({...z, low:false})), ...Z.low.map(z => ({...z, low:true}))];
+    const maxv = Math.max(...rowsAll.map(per));
+    $("#snapdate").textContent = Z.taken;
+    $("#bars").innerHTML = rowsAll.map((z,i) => (i === Z.top.length ? `<p class="fine gap">For contrast, the lowest five zips:</p>` : "") +
+      `<div class="zrow ${z.low?"low":""}"><span class="z">${z.zip}</span><span class="track"><i style="width:${per(z)/maxv*100}%"></i></span><span class="v">${per(z).toFixed(1)}</span></div>`).join("");
+    $("#ztable").innerHTML = `<tr><th>Zip</th><th>Hazardous (B+C)</th><th>Class C</th><th>Buildings</th><th>Per building</th></tr>` +
+      rowsAll.map(z => `<tr><td>${z.zip}</td><td>${fmt(haz(z))}</td><td>${fmt(z.C)}</td><td>${fmt(z.buildings)}</td><td>${per(z).toFixed(1)}</td></tr>`).join("");
+    $("#citywide").textContent = `Citywide: ${fmt(Z.tot_h)} open hazardous housing violations, ${fmt(Z.tot_c)} of them Class C, across ${Z.n} zip codes with 50 or more buildings. Source: HPD housing violations, NYC Open Data.`;
+  } catch (e) { $("#bars").innerHTML = `<p class="fine">No monthly snapshot found yet. Run: python -m propwatch monthly</p>`; }
+})();
+</script>

@@ -31,6 +31,13 @@ lower-income neighborhoods. The data is public but scattered across agencies.
 Propwatch puts it in one place so owners, tenants and communities can see it,
 and see what has gone unfixed for years.
 
+## Web app
+```bash
+python -m propwatch serve        # open http://127.0.0.1:8000
+```
+Type any NYC address or zip and get the same summary in a page. Runs on your
+machine only (binds to 127.0.0.1) and caches answers for 10 minutes.
+
 ## Neighborhood view
 Which zip codes carry the most unresolved hazardous housing violations, and
 for how long?
