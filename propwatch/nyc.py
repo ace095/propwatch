@@ -189,6 +189,8 @@ def lookup(address: str) -> dict:
     hpd = d["hpd"]
     hpd_open = [r for r in hpd if r.get("violationstatus") == "Open"] if hpd is not None else None
     by_class, over5 = {}, 0
+    # "certified" = the owner says it was fixed; HPD still lists it open until it verifies
+    certified = sum(1 for r in hpd_open or [] if "CERTIFIED" in (r.get("currentstatus") or "").upper())
     for r in hpd_open or []:
         by_class[r.get("class", "?")] = by_class.get(r.get("class", "?"), 0) + 1
         if _age_years(r.get("novissueddate")) > STALE_RECORD_YEARS:
@@ -213,6 +215,7 @@ def lookup(address: str) -> dict:
                 "total_on_record": None if hpd is None else len(hpd),
                 "open_by_class": by_class,       # A minor, B hazardous, C immediately hazardous
                 "open_over_5_years": over5,       # possibly stale records
+                "certified_awaiting": certified,  # owner certified a fix; still listed open
                 "oldest_open_issued": min((r["novissueddate"][:10] for r in hpd_open or []
                                            if r.get("novissueddate")), default=None),
                 "examples": [{"class": r.get("class"), "issued": (r.get("novissueddate") or "")[:10],
@@ -266,6 +269,9 @@ def render(r: dict) -> str:
         f"311 (last year):    {_n(c['total'])} requests, {c['still_open']} still open"
         + (f"; most common: {c['top_types'][0][0]}" if c["top_types"] else ""),
     ]
+    if h.get("certified_awaiting"):
+        lines.append(f"Certified fixed:    {h['certified_awaiting']} of the open housing violations show the owner "
+                     "certified the repair (listed open until HPD verifies).")
     if h.get("open_over_5_years"):
         lines.append(f"Possibly stale:     {h['open_over_5_years']} housing violations have been open "
                      f"over {STALE_RECORD_YEARS} years; verify these on HPD Online.")

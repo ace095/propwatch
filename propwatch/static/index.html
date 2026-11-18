@@ -224,6 +224,7 @@ function show(a) {
     ${h.examples.length ? `<p class="fine"><b>Example on record:</b> Class ${esc(h.examples[0].class)}, issued ${esc(h.examples[0].issued)}: ${esc(h.examples[0].text.toLowerCase())}…</p>` : ""}
     ${(a.next_steps||[]).length ? `<h3 class="gap">What this usually means</h3><div class="steps">${a.next_steps.map(s => `<div class="step"><b>${esc(s.title)}</b><p>${esc(s.body)}${s.link ? ` <a href="${esc(s.link)}" target="_blank" rel="noopener">City guide</a>` : ""}</p></div>`).join("")}</div>` : ""}
     ${none ? `<p class="fine">No housing records is normal for many 1-2 family homes. Nothing on record is not proof of good condition.</p>` : ""}
+    ${h.certified_awaiting ? `<div class="note">${fmt(h.certified_awaiting)} of the open housing violations show the owner already certified the repair. HPD still lists them open until it verifies.</div>` : ""}
     ${h.open_over_5_years ? `<div class="note">${fmt(h.open_over_5_years)} of the open housing violations are more than 5 years old. Old items can be paperwork that was never closed, so check each one on HPD Online before acting.</div>` : ""}
     <p class="fine">This shows what is on record. It does not say whether the building is safe.</p></div>`;
 }

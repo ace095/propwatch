@@ -104,3 +104,16 @@ class StaleRecords(unittest.TestCase):
     def test_age_years(self):
         self.assertGreater(nyc._age_years("2010-01-01"), 15)
         self.assertEqual(nyc._age_years(None), 0.0)
+
+
+class CertifiedCount(unittest.TestCase):
+    def test_certified_late_is_counted_separately(self):
+        rows = [{"violationstatus": "Open", "currentstatus": "NOV CERTIFIED LATE", "class": "A"},
+                {"violationstatus": "Open", "currentstatus": "NOV SENT OUT", "class": "B"}]
+        def fake(rid, where, select=None, limit=5000):
+            return rows if rid == "wvxf-dwi5" else []
+        with mock.patch.object(nyc, "resolve", return_value=FailureHandling.prop), \
+             mock.patch.object(nyc, "_soda", side_effect=fake):
+            r = nyc.lookup("x")
+        self.assertEqual(r["hpd"]["open"], 2)
+        self.assertEqual(r["hpd"]["certified_awaiting"], 1)
