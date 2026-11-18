@@ -1,7 +1,2 @@
-# Core audit.py runs on stdlib alone. These make it better:
-requests            # more robust HTTP than urllib
-beautifulsoup4      # HTML parsing for accessibility checks
-dnspython           # SPF/DKIM/DMARC lookups without needing `dig`
-
-# For the report step:
-anthropic           # Claude API client
+# Claude API client (used by the digest summaries)
+anthropic

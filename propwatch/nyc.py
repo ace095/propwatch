@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
 """
 Prototype: open violations for one NYC address, from NYC Open Data (public).
 
-    python nyc_violations.py 22 "Stagg Street" brooklyn
-    python nyc_violations.py 22 "Stagg Street" brooklyn --json out.json
+    python -m propwatch 22 "Stagg Street" brooklyn
+    python -m propwatch 22 "Stagg Street" brooklyn --json out.json
 
 Sources (data.cityofnewyork.us, Socrata):
     wvxf-dwi5  HPD housing maintenance code violations
@@ -85,19 +84,16 @@ def lookup(house: str, street: str, borough: str) -> dict:
     }
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Open NYC violations for one address.")
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="propwatch",
+                                 description="Open NYC violations for one address.")
     ap.add_argument("house")
     ap.add_argument("street")
     ap.add_argument("borough", choices=sorted(BOROS))
     ap.add_argument("--json", metavar="FILE")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     res = lookup(a.house, a.street, a.borough)
     print(json.dumps(res, indent=2))
     if a.json:
         with open(a.json, "w") as f:
             json.dump(res, f, indent=2)
-
-
-if __name__ == "__main__":
-    main()

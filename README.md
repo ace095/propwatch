@@ -1,59 +1,54 @@
-# WebAudit — passive website compliance & security audit (MVP)
+# Propwatch
 
-Reads **public** information about a website and turns it into a client-ready
-compliance report. Built to be the front door of an audit service: run the free
-passive scan, hand over the findings, close the paid engagement.
+Plain-English violation alerts for NYC property owners.
 
-## What it checks (all passive)
-- TLS/SSL: reachable, version, cert issuer, days-to-expiry
-- HTTP→HTTPS redirect
-- Security headers: HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
-- Email auth DNS: SPF, DMARC (+ DKIM note)
-- Privacy signals: policy pages, cookie mentions, analytics, cookie-banner hint
-- Accessibility signals: `lang` attr, page title, images missing alt text
+Small landlords and co-op boards often learn about housing and building
+violations late, after fines have grown. Propwatch reads the city's public
+data for an address and tells the owner what is on record, what is new, and
+what to do about it.
 
-## What it deliberately does NOT do
-No login testing, no vuln probing, no port scans, no payloads. Passive only.
-Running active tests on a site you don't own/weren't authorized to test can be
-a federal crime (CFAA). Keep it passive until you have signed authorization.
+> Status: early prototype. It looks up **one address** today. Weekly email
+> digests are next.
+
+## What it does today
+Looks up open violations for an address from NYC Open Data (public Socrata
+datasets):
+
+| Dataset | ID |
+|---|---|
+| HPD housing maintenance code violations | `wvxf-dwi5` |
+| DOB violations (older, BIS) | `3h2n-5cm9` |
+| DOB safety violations (newer, DOB NOW) | `855j-jady` |
+
+```bash
+python -m propwatch 22 "Stagg Street" brooklyn
+python -m propwatch 22 "Stagg Street" brooklyn --json out.json
+```
+
+Output: open HPD violations (with Class A/B/C counts; **C = immediately
+hazardous**), oldest open issue date, and active DOB violations.
+
+## Limits (be honest about these)
+- Matches by house number + street text, not a geocoder, so unusual spellings
+  or corner buildings can miss.
+- Reports what is **on record**. It says nothing about whether a building is
+  structurally safe; that takes a licensed professional.
+- Not yet checked against the city's own lookup tools for accuracy.
+
+## Roadmap
+1. Address list + weekly diff ("2 new violations since last week")
+2. Claude-written plain-English summary and next steps for each violation
+3. Email digest
+4. Filing/inspection deadline reminders (e.g. facade, boiler)
+5. Validate demand with landlords / co-op boards before building more
 
 ## Setup
 ```bash
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt   # optional but recommended
+pip install -r requirements.txt
+cp .env.example .env     # only needed for the Claude summaries (coming next)
+python -m unittest discover -s tests -v
 ```
 
-## Run a scan
-```bash
-python audit.py example.edu                 # prints JSON
-python audit.py example.edu --json out.json # also saves it
-```
-
-## Generate a report
-```bash
-cp .env.example .env   # then paste your key from https://platform.claude.com/settings/keys
-python report.py example.edu --sector "K-12 public school" --single
-```
-
-## The business flow this supports
-1. Passive scan (free) → findings
-2. Cold outreach with the findings
-3. They sign an engagement (authorization)
-4. Deep scan + remediation (the paid part)
-
-## Roadmap (next steps)
-- Add axe-core/Pa11y (Node) for a real WCAG 2.1 AA audit
-- Split the single report prompt into Accessibility / Privacy / Security agents
-- Add a job queue + Postgres so you can scan many domains on a schedule
-- PDF export of the report
-- Rate limiting + allowlist baked into the crawler
-
-## Guardrails to keep
-- Respect robots.txt (already fetched)
-- Gentle rate limits — hammering a site looks like an attack
-- Keep collectors structurally incapable of active testing
-
-## Tests
-```bash
-python -m unittest discover -s tests -v   # offline, no network needed
-```
+## Principles
+- Public data only; no scraping behind logins.
+- Say "on record" / "indicates", never "safe" or "compliant".

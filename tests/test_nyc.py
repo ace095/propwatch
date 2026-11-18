@@ -1,6 +1,6 @@
 import os, sys, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import nyc_violations as n
+from propwatch import nyc as n
 
 
 class StreetNormalization(unittest.TestCase):
