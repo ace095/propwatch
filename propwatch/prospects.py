@@ -21,6 +21,14 @@ from .log import log, setup as setup_logging, timed
 
 BOROIDS = {"manhattan": "1", "bronx": "2", "brooklyn": "3", "queens": "4", "staten island": "5"}
 BATCH = 80
+# Government and public-housing owners are not customers for this product.
+GOV = re.compile(r"\b(CITY OF NEW YORK|NEW YORK CITY|NYC|HOUSING AUTHORITY|NYCHA|HPD|"
+                 r"DEPARTMENT OF|DEPT OF|STATE OF NEW YORK|UNITED STATES|U\.?S\.? GOVERNMENT|"
+                 r"HOUSING PRESERVATION)\b")
+
+
+def is_government(name: str) -> bool:
+    return bool(GOV.search(name.upper()))
 
 
 def _q(rid, **p):
@@ -63,7 +71,7 @@ def build(boroid=None, lo=10, hi=400, limit=1500):
             "$where": f"registrationid in ({chunk})", "$limit": "5000"})}
         for c in contacts:
             key = norm_company(c["corporationname"])
-            if not key:
+            if not key or is_government(c["corporationname"]):
                 continue
             e = companies.setdefault(key, {
                 "company": c["corporationname"].strip(), "roles": set(), "regs": set(),
@@ -84,14 +92,17 @@ def build(boroid=None, lo=10, hi=400, limit=1500):
     out = []
     for e in companies.values():
         role = "/".join(sorted(e["roles"]))
-        noun = "buildings you manage" if role == "Managing agent" else "of your registered buildings"
+        n = len(e["regs"])
+        what = ("building" if n == 1 else "buildings")
+        where = (f"{n} {what} you manage" if role == "Managing agent"
+                 else f"{n} registered {what}")
         out.append({
             "company": e["company"], "role": role, "business_address": e["address"],
             "city_state_zip": e["city"], "buildings": len(e["regs"]),
             "open_hazardous": e["hazardous"], "class_c": e["class_c"],
             "sample_buildings": "; ".join(e["samples"]),
             "talking_point": f"City records show {e['hazardous']:,} open hazardous housing "
-                             f"violations across {len(e['regs'])} {noun}."})
+                             f"violations across {where}."})
     out.sort(key=lambda r: -r["open_hazardous"])
     return out
 

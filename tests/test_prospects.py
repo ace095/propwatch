@@ -11,6 +11,12 @@ class Prospects(unittest.TestCase):
     def test_different_companies_stay_apart(self):
         self.assertNotEqual(p.norm_company("A Realty LLC"), p.norm_company("B Realty LLC"))
 
+    def test_government_owners_are_excluded(self):
+        for name in ("CITY OF NEW YORK", "New York City Housing Authority", "NYC HPD", "STATE OF NEW YORK"):
+            self.assertTrue(p.is_government(name), name)
+        for name in ("Concord Management of NY LLC", "Cityview Realty Corp", "Hudson Valley Holdings"):
+            self.assertFalse(p.is_government(name), name)
+
     def test_no_personal_name_fields_requested(self):
         src = open(p.__file__, encoding="utf-8").read()
         self.assertNotIn("firstname", src.split('"""')[2])   # code, not the docstring
