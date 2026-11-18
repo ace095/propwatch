@@ -68,6 +68,7 @@ th,td{padding:8px 10px;border-top:1px solid var(--line);text-align:right;font-va
 th:first-child,td:first-child{text-align:left;font-family:var(--mono)}
 th{color:var(--muted);font-weight:500;font-size:12.5px}
 .gap{margin-top:22px}
+.step{border-top:1px solid var(--line);padding:10px 0}.step p{margin:2px 0 0;color:var(--muted);font-size:14px}.step a{color:var(--accent)}
 /* pitch */
 .flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0 22px}
 .flow .card b{display:block;font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:4px}
@@ -202,6 +203,7 @@ function show(a) {
       ${row("311 requests, last 12 months",`${fmt(c.still_open)} still open`,c.total,false)}
     </dl>
     ${h.examples.length ? `<p class="fine"><b>Example on record:</b> Class ${esc(h.examples[0].class)}, issued ${esc(h.examples[0].issued)}: ${esc(h.examples[0].text.toLowerCase())}…</p>` : ""}
+    ${(a.next_steps||[]).length ? `<h3 class="gap">What this usually means</h3><div class="steps">${a.next_steps.map(s => `<div class="step"><b>${esc(s.title)}</b><p>${esc(s.body)}${s.link ? ` <a href="${esc(s.link)}" target="_blank" rel="noopener">City guide</a>` : ""}</p></div>`).join("")}</div>` : ""}
     ${none ? `<p class="fine">No housing records is normal for many 1-2 family homes. Nothing on record is not proof of good condition.</p>` : ""}
     <p class="fine">This shows what is on record. It does not say whether the building is safe.</p></div>`;
 }

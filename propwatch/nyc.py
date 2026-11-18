@@ -89,6 +89,10 @@ def _digits(v: str, what: str) -> str:
 # ---------- step 2: ask each dataset about that property ----------
 
 def lookup(address: str) -> dict:
+    return with_steps(_lookup(address))
+
+
+def _lookup(address: str) -> dict:
     prop = resolve(address)
     boro, block, lot = bbl_parts(_digits(prop["bbl"], "bbl"))
     bin_ = _digits(prop["bin"] or "0", "bin")
@@ -144,6 +148,12 @@ def lookup(address: str) -> dict:
     }
 
 
+def with_steps(result: dict) -> dict:
+    from .guidance import next_steps
+    result["next_steps"] = next_steps(result)
+    return result
+
+
 def _esc(s: str) -> str:
     return s.replace("'", "''")
 
@@ -176,6 +186,10 @@ def render(r: dict) -> str:
     if h["open"] == 0 and d["active_older_system"] + d["active_dob_now"] == 0:
         lines.append("Note: no HPD records is normal for many 1-2 family homes; "
                      "check DOB, ECB and 311 above.")
+    if r.get("next_steps"):
+        lines += ["", "What this usually means:"]
+        for st in r["next_steps"]:
+            lines.append(f"  - {st['title']}: {st['body']}")
     return "\n".join(lines)
 
 

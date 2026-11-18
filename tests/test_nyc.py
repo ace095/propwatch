@@ -48,3 +48,24 @@ class Render(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Guidance(unittest.TestCase):
+    from propwatch import guidance as g
+    base = {"hpd": {"open_by_class": {}}, "dob": {"active_older_system": 0, "active_dob_now": 0},
+            "ecb_penalties": {"active": 0}}
+
+    def test_nothing_open_gives_no_steps(self):
+        self.assertEqual(self.g.next_steps(self.base), [])
+
+    def test_class_c_comes_first_and_mentions_24_hours(self):
+        r = dict(self.base, hpd={"open_by_class": {"C": 2, "A": 5}})
+        steps = self.g.next_steps(r)
+        self.assertIn("Class C", steps[0]["title"])
+        self.assertIn("24 hours", steps[0]["body"])
+        self.assertIn("not legal advice", steps[-1]["body"])
+
+    def test_no_dollar_penalties_stated(self):
+        r = dict(self.base, hpd={"open_by_class": {"A": 1, "B": 1, "C": 1}},
+                 dob={"active_older_system": 1, "active_dob_now": 0}, ecb_penalties={"active": 1})
+        self.assertNotIn("$", " ".join(s["body"] for s in self.g.next_steps(r)))
