@@ -3,6 +3,9 @@ import sys
 if len(sys.argv) > 1 and sys.argv[1] == "area":
     from .area import main
     main(sys.argv[2:])
+elif len(sys.argv) > 1 and sys.argv[1] == "prospects":
+    from .prospects import main
+    main(sys.argv[2:])
 elif len(sys.argv) > 1 and sys.argv[1] == "serve":
     from .web import main
     main(sys.argv[2:])

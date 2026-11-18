@@ -20,8 +20,8 @@ def next_steps(r: dict) -> list:
     """List of {'title','body','link'} for a lookup() result. Empty if nothing is open."""
     steps = []
     h = r["hpd"]["open_by_class"]
-    dob_n = r["dob"]["active_older_system"] + r["dob"]["active_dob_now"]
-    ecb = r["ecb_penalties"]
+    dob_n = (r["dob"]["active_older_system"] or 0) + (r["dob"]["active_dob_now"] or 0)
+    ecb = {"active": r["ecb_penalties"]["active"] or 0}
 
     if h.get("C"):
         steps.append({

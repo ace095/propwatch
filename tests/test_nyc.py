@@ -69,3 +69,38 @@ class Guidance(unittest.TestCase):
         r = dict(self.base, hpd={"open_by_class": {"A": 1, "B": 1, "C": 1}},
                  dob={"active_older_system": 1, "active_dob_now": 0}, ecb_penalties={"active": 1})
         self.assertNotIn("$", " ".join(s["body"] for s in self.g.next_steps(r)))
+
+
+class FailureHandling(unittest.TestCase):
+    """A dead data source must read as 'unavailable', never as a clean zero."""
+    prop = {"label": "1 TEST ST, Bronx, NY, USA", "bbl": "2024660050", "bin": "2002867",
+            "housenumber": "1", "street": "Test St", "borough": "Bronx", "zip": "10452"}
+
+    def run_lookup(self, failing):
+        def fake_soda(rid, where, select=None, limit=5000):
+            if rid == failing:
+                raise OSError("boom")
+            return []
+        with mock.patch.object(nyc, "resolve", return_value=self.prop), \
+             mock.patch.object(nyc, "_soda", side_effect=fake_soda):
+            return nyc.lookup("1 Test St, Bronx")
+
+    def test_failed_source_is_unavailable_not_zero(self):
+        r = self.run_lookup("wvxf-dwi5")
+        self.assertIn("HPD housing violations", r["unavailable"])
+        self.assertIsNone(r["hpd"]["open"])
+        self.assertIn("WARNING", nyc.render(r))
+
+    def test_other_sources_still_reported(self):
+        r = self.run_lookup("erm2-nwe9")
+        self.assertEqual(r["hpd"]["open"], 0)
+        self.assertEqual(r["unavailable"], ["311 requests"])
+
+    def test_all_good_has_nothing_unavailable(self):
+        self.assertEqual(self.run_lookup("none")["unavailable"], [])
+
+
+class StaleRecords(unittest.TestCase):
+    def test_age_years(self):
+        self.assertGreater(nyc._age_years("2010-01-01"), 15)
+        self.assertEqual(nyc._age_years(None), 0.0)

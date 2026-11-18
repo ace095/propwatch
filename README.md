@@ -38,6 +38,31 @@ python -m propwatch serve        # open http://127.0.0.1:8000
 Type any NYC address or zip and get the same summary in a page. Runs on your
 machine only (binds to 127.0.0.1) and caches answers for 10 minutes.
 
+## For landlords: check all your buildings
+In the web app, the **My buildings** tab takes up to 25 addresses (one per line)
+and returns a table sorted worst first, with a spreadsheet download.
+
+## Prospect list (for outreach)
+```bash
+python -m propwatch prospects --borough bronx --min 10 --max 400 --out prospects.csv
+```
+Lists the **businesses** registered as owners or managing agents of buildings
+with open hazardous violations (from HPD's public registrations): company,
+business address, buildings, open hazardous count, and a factual talking point.
+It reads **no individual names**, and no phone numbers or emails exist in this
+data. Output files are gitignored. Check do-not-call and cold-outreach rules
+before calling. Unregistered buildings (registration "0") are excluded because
+there is no one to contact.
+
+## Freshness, errors and stale records
+- Each dataset's last-updated time comes from the city; the page footer and
+  `/api/health` show it and warn if a source is over 7 days old.
+- If a source can't be reached, that line says **unavailable**, never zero.
+- Open housing violations over 5 years old are flagged "possibly stale".
+- Logs: `logs/propwatch.log` (per-source timings, retries, failures).
+- Lookups run the six sources in parallel (about 5 seconds).
+- Internal pitch page: open the web app with `#internal` on the end of the URL.
+
 ## Neighborhood view
 Which zip codes carry the most unresolved hazardous housing violations, and
 for how long?

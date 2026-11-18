@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 out.json
 .env
+logs/
+prospects*.csv
+__pycache__/

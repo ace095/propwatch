@@ -68,6 +68,11 @@ th,td{padding:8px 10px;border-top:1px solid var(--line);text-align:right;font-va
 th:first-child,td:first-child{text-align:left;font-family:var(--mono)}
 th{color:var(--muted);font-weight:500;font-size:12.5px}
 .gap{margin-top:22px}
+textarea{width:100%;font:inherit;padding:11px 12px;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:6px;margin-bottom:10px;resize:vertical}
+.warn{border-left:3px solid var(--cC);background:var(--surface);padding:10px 14px;border-radius:0 6px 6px 0;margin:0 0 14px;font-size:14px}
+.sev{display:inline-block;min-width:34px;text-align:center;border-radius:4px;padding:1px 6px;color:#fff;font-family:var(--mono);font-size:12.5px}
+.sev.C{background:var(--cC)}.sev.B{background:var(--cB)}.sev.A{background:var(--cA);color:#1b1f23}.sev.z{background:var(--line);color:var(--muted)}
+td.l,th.l{text-align:left!important;font-family:var(--sans)!important}
 .step{border-top:1px solid var(--line);padding:10px 0}.step p{margin:2px 0 0;color:var(--muted);font-size:14px}.step a{color:var(--accent)}
 /* pitch */
 .flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0 22px}
@@ -85,12 +90,13 @@ li{margin:4px 0}
 <div class="wrap">
 <header>
   <div class="brand">Prop<span>watch</span></div>
-  <div class="tag">What New York City has on record for a property, in plain English</div>
+  <div class="tag">See what the city has on record for your buildings, and what to do about it</div>
 </header>
 <nav role="tablist" aria-label="Sections">
   <button role="tab" id="t-look" aria-selected="true" data-tab="look">Look up an address</button>
+  <button role="tab" id="t-mine" aria-selected="false" data-tab="mine">My buildings</button>
   <button role="tab" id="t-area" aria-selected="false" data-tab="area">Neighborhoods</button>
-  <button role="tab" id="t-pitch" aria-selected="false" data-tab="pitch">The pitch</button>
+  <button role="tab" id="t-pitch" aria-selected="false" data-tab="pitch" hidden>Internal: pitch</button>
 </nav>
 
 <section id="look">
@@ -102,6 +108,14 @@ li{margin:4px 0}
   </form>
   <div class="chips" id="chips"></div>
   <div id="result"></div>
+</section>
+
+<section id="mine" hidden>
+  <h2>Check all your buildings at once</h2>
+  <p class="sub">One address per line, up to 25. You get a table sorted worst first, and a spreadsheet you can download.</p>
+  <textarea id="addrs" rows="6" placeholder="22 Stagg Street, Brooklyn&#10;1177 Walton Avenue, Bronx" aria-label="Addresses, one per line"></textarea>
+  <div class="search"><button class="btn" id="runmine" type="button">Check my buildings</button><button class="chip" id="csv" type="button" hidden>Download spreadsheet</button></div>
+  <div id="mineout"></div>
 </section>
 
 <section id="area" hidden>
@@ -143,18 +157,20 @@ li{margin:4px 0}
   <div class="note"><b>Not proven yet.</b> No one has said they'd pay. Other free tools already show this data to tenants. Before building more, ask 5 small landlords or co-op board members: how do you find out about violations today, what has it cost you, and would you pay to hear sooner?</div>
   <p class="fine">Propwatch reports what is on record. It never says a building is safe, and it is not a substitute for a licensed inspector.</p>
 </section>
+<p class="fine" id="asof"></p>
 </div>
 
 <script>
 const $ = s => document.querySelector(s);
 const fmt = n => n.toLocaleString("en-US");
+if (location.hash === "#internal") document.getElementById("t-pitch").hidden = false;
 const EXAMPLES = ["22 Stagg Street, Brooklyn", "350 5th Avenue, Manhattan", "1177 Walton Avenue, Bronx"];
 const nameOf = a => a.address.replace(", NY, USA", "");
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
-  ["look","area","pitch"].forEach(id => $("#"+id).hidden = id !== b.dataset.tab);
+  ["look","mine","area","pitch"].forEach(id => $("#"+id).hidden = id !== b.dataset.tab);
 }));
 
 async function api(path) {
@@ -180,10 +196,10 @@ function bar(c) {
     parts.map(([k,col]) => `<i style="width:${(c[k]||0)/tot*100}%;background:${col}"></i>`).join("") + `</div><div class="legend">` +
     parts.map(([k,col,t]) => `<span><b style="background:${col}"></b>${fmt(c[k]||0)} ${t}</span>`).join("") + `</div>`;
 }
-const row = (t, sub, v, zg) => `<dt>${t}${sub ? `<small>${sub}</small>` : ""}</dt><dd class="${zg && v === 0 ? "zero" : ""}">${typeof v === "number" ? fmt(v) : v}</dd>`;
+const row = (t, sub, v, zg) => `<dt>${t}${sub ? `<small>${sub}</small>` : ""}</dt><dd class="${zg && v === 0 ? "zero" : ""}">${v === null ? "unavailable" : typeof v === "number" ? fmt(v) : v}</dd>`;
 
 function say(a) {
-  const h = a.hpd, dob = a.dob.active_older_system + a.dob.active_dob_now, c = h.open_by_class.C || 0, bits = [];
+  const h = a.hpd, dob = (a.dob.active_older_system||0) + (a.dob.active_dob_now||0), c = h.open_by_class.C || 0, bits = [];
   if (h.open) bits.push(`<b>${fmt(h.open)} open housing violations</b>` + (c ? `, ${fmt(c)} of them Class C (immediately hazardous)` : "") + (h.oldest_open_issued ? `. The oldest was issued ${h.oldest_open_issued}` : ""));
   if (dob) bits.push(`<b>${fmt(dob)} active building-department violation${dob>1?"s":""}</b>`);
   if (a.ecb_penalties.balance_due) bits.push(`<b>$${fmt(Math.round(a.ecb_penalties.balance_due))} in penalties owed</b>`);
@@ -191,10 +207,13 @@ function say(a) {
 }
 
 function show(a) {
-  const h = a.hpd, d = a.dob, e = a.ecb_penalties, c = a.complaints_311_last_year, dobN = d.active_older_system + d.active_dob_now;
-  const none = !h.open && !dobN;
+  const h = a.hpd, d = a.dob, e = a.ecb_penalties, c = a.complaints_311_last_year;
+  const dobN = (d.active_older_system === null || d.active_dob_now === null) ? null : d.active_older_system + d.active_dob_now;
+  const none = !h.open && !dobN && !(a.unavailable||[]).length;
   $("#result").innerHTML = `<div class="card"><div class="addr">${esc(nameOf(a))}</div>
-    <div class="ids">BBL ${esc(a.bbl)} · BIN ${esc(a.bin)}</div><p class="say">${say(a)}</p>${bar(h.open_by_class)}
+    <div class="ids">BBL ${esc(a.bbl)} · BIN ${esc(a.bin)}</div>
+    ${(a.unavailable||[]).length ? `<div class="warn"><b>Couldn't reach:</b> ${a.unavailable.map(esc).join("; ")}. Those lines show "unavailable", not zero. Try again in a moment.</div>` : ""}
+    <p class="say">${say(a)}</p>${bar(h.open_by_class)}
     <dl class="rows">
       ${row("Housing violations open","HPD, mostly multi-unit rentals",h.open,true)}
       ${row("Building violations active","Department of Buildings, old and new systems",dobN,true)}
@@ -205,6 +224,7 @@ function show(a) {
     ${h.examples.length ? `<p class="fine"><b>Example on record:</b> Class ${esc(h.examples[0].class)}, issued ${esc(h.examples[0].issued)}: ${esc(h.examples[0].text.toLowerCase())}…</p>` : ""}
     ${(a.next_steps||[]).length ? `<h3 class="gap">What this usually means</h3><div class="steps">${a.next_steps.map(s => `<div class="step"><b>${esc(s.title)}</b><p>${esc(s.body)}${s.link ? ` <a href="${esc(s.link)}" target="_blank" rel="noopener">City guide</a>` : ""}</p></div>`).join("")}</div>` : ""}
     ${none ? `<p class="fine">No housing records is normal for many 1-2 family homes. Nothing on record is not proof of good condition.</p>` : ""}
+    ${h.open_over_5_years ? `<div class="note">${fmt(h.open_over_5_years)} of the open housing violations are more than 5 years old. Old items can be paperwork that was never closed, so check each one on HPD Online before acting.</div>` : ""}
     <p class="fine">This shows what is on record. It does not say whether the building is safe.</p></div>`;
 }
 
@@ -243,5 +263,50 @@ $("#zform").addEventListener("submit", async ev => {
       rowsAll.map(z => `<tr><td>${z.zip}</td><td>${fmt(haz(z))}</td><td>${fmt(z.C)}</td><td>${fmt(z.buildings)}</td><td>${per(z).toFixed(1)}</td></tr>`).join("");
     $("#citywide").textContent = `Citywide: ${fmt(Z.tot_h)} open hazardous housing violations, ${fmt(Z.tot_c)} of them Class C, across ${Z.n} zip codes with 50 or more buildings. Source: HPD housing violations, NYC Open Data.`;
   } catch (e) { $("#bars").innerHTML = `<p class="fine">No monthly snapshot found yet. Run: python -m propwatch monthly</p>`; }
+})();
+
+let mineRows = [];
+$("#runmine").addEventListener("click", async () => {
+  const addrs = $("#addrs").value.split("\n").map(s => s.trim()).filter(Boolean);
+  if (!addrs.length) return;
+  $("#csv").hidden = true;
+  $("#mineout").innerHTML = `<div class="card"><p class="fine">Checking ${addrs.length} building${addrs.length>1?"s":""}… about 5 seconds each.</p></div>`;
+  try {
+    const r = await fetch("/api/portfolio", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({addresses: addrs})});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Request failed");
+    mineRows = j.rows.sort((a, b) => ((b.class_c||0)*1000 + (b.class_b||0)) - ((a.class_c||0)*1000 + (a.class_b||0)));
+    renderMine();
+  } catch (e) { $("#mineout").innerHTML = `<div class="card"><p>${esc(e.message)}</p></div>`; }
+});
+const sev = (k, n) => `<span class="sev ${n ? k : "z"}">${n === null ? "?" : fmt(n)}</span>`;
+function renderMine() {
+  const ok = mineRows.filter(r => !r.error);
+  const tot = ok.reduce((s, r) => s + (r.hpd_open||0), 0), totC = ok.reduce((s, r) => s + (r.class_c||0), 0);
+  const owed = ok.reduce((s, r) => s + (r.balance_due||0), 0);
+  $("#mineout").innerHTML = `<div class="card"><p class="say"><b>${ok.length} building${ok.length!==1?"s":""}:</b> ${fmt(tot)} open housing violations, ${fmt(totC)} Class C (immediately hazardous)${owed ? `, $${fmt(Math.round(owed))} in penalties owed` : ""}.</p>
+    <div class="tbl"><table><tr><th class="l">Building</th><th>C</th><th>B</th><th>A</th><th>Bldgs dept</th><th>Owed</th></tr>` +
+    mineRows.map(r => r.error
+      ? `<tr><td class="l">${esc(r.input)}<br><small>${esc(r.error)}</small></td><td colspan="5" style="text-align:left">Not checked</td></tr>`
+      : `<tr><td class="l">${esc(r.address)}${r.unavailable.length ? `<br><small>Couldn't reach: ${r.unavailable.map(esc).join("; ")}</small>` : ""}${r.open_over_5y ? `<br><small>${fmt(r.open_over_5y)} open over 5 years</small>` : ""}</td>
+         <td>${sev("C", r.class_c)}</td><td>${sev("B", r.class_b)}</td><td>${sev("A", r.class_a)}</td><td>${r.dob_active === null ? "?" : fmt(r.dob_active)}</td><td>$${fmt(Math.round(r.balance_due||0))}</td></tr>`).join("") +
+    `</table></div><p class="fine">C = immediately hazardous, B = hazardous, A = non-hazardous. Sorted worst first. What is on record, not a safety rating.</p></div>`;
+  $("#csv").hidden = !ok.length;
+}
+$("#csv").addEventListener("click", () => {
+  const cols = ["address","bbl","hpd_open","class_c","class_b","class_a","open_over_5y","dob_active","penalties_active","balance_due"];
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = [cols.join(","), ...mineRows.filter(r => !r.error).map(r => cols.map(c => q(r[c])).join(","))].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv"})); a.download = "my-buildings.csv"; a.click();
+});
+
+(async () => {
+  try {
+    const hl = await api("/api/health");
+    const dates = Object.values(hl.sources).map(s => s.updated).filter(Boolean).sort();
+    $("#asof").innerHTML = (dates.length ? `City data last refreshed ${esc(dates[0].slice(0,10))} or later. ` : "") +
+      (hl.stale.length ? `<b>Heads up:</b> the city hasn't updated ${hl.stale.map(esc).join(", ")} in over a week.` : "All six sources updated within the last week.");
+  } catch (_) { $("#asof").textContent = "Couldn't check how fresh the city data is."; }
 })();
 </script>
